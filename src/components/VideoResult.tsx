@@ -169,8 +169,11 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       // Add random query parameter to bypass cache
       const urlWithCache = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
       
+      console.log("Fetching URL with no-cache:", urlWithCache);
+      
       // Fetch with explicit headers to help with CORS and content type detection
       const response = await fetch(urlWithCache, {
+        method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'video/*, audio/*, application/octet-stream',
@@ -178,10 +181,12 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         }
       });
       
+      console.log("Response status:", response.status);
+      console.log("Response headers:", Array.from(response.headers.entries()));
+      
       if (!response.ok) {
         toast.dismiss(toastId);
         console.error(`Error fetching file: ${response.status} ${response.statusText}`);
-        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
         throw new Error(`Failed to download: ${response.statusText}`);
       }
       
@@ -221,7 +226,9 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       }
       
       // Convert response to blob
+      console.log("Starting blob conversion...");
       const blob = await response.blob();
+      console.log("Blob created, size:", blob.size, "bytes, type:", blob.type);
       
       // Check if blob is empty or too small
       if (blob.size < 1000) {
@@ -232,6 +239,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       
       // Create a blob URL 
       const blobUrl = URL.createObjectURL(blob);
+      console.log("Blob URL created:", blobUrl);
       
       // Create download element
       const a = document.createElement("a");
@@ -239,12 +247,15 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       a.download = `${title || 'youtube_video'}.${fileExtension}`;
       a.style.display = 'none';
       document.body.appendChild(a);
+      
+      console.log("Initiating download click...");
       a.click();
       
       // Clean up
       setTimeout(() => {
         document.body.removeChild(a);
         URL.revokeObjectURL(blobUrl);
+        console.log("Cleanup completed");
       }, 100);
       
       toast.dismiss(toastId);

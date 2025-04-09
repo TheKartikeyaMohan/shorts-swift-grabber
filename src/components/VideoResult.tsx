@@ -55,10 +55,10 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         return;
       }
       
-      // Otherwise call our new edge function
+      // Otherwise call our edge function
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
-          videoUrl: storedUrl, 
+          url: storedUrl, 
           format: selectedFormat
         }
       });

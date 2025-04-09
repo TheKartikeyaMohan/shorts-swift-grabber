@@ -3,7 +3,6 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Clipboard } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 
@@ -25,23 +24,37 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
       return;
     }
     
-    // More flexible URL validation for YouTube videos
+    // Improved YouTube URL validation for videos and shorts
     if (!isValidYouTubeUrl(url)) {
       toast.error("Please enter a valid YouTube URL");
       return;
     }
     
+    // Standardize URL format before sending
+    const standardizedUrl = standardizeYouTubeUrl(url.trim());
+    
     // Store the URL in localStorage for later use
-    localStorage.setItem("lastYoutubeUrl", url);
+    localStorage.setItem("lastYoutubeUrl", standardizedUrl);
     localStorage.setItem("lastFormat", format);
     
-    onSearch(url, format);
+    onSearch(standardizedUrl, format);
   };
 
+  // Improved validation for YouTube URLs
   const isValidYouTubeUrl = (url: string) => {
-    // Updated regex to check for YouTube URLs including regular videos and shorts
+    // Regex for various YouTube URL formats including shorts and regular videos
     const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(shorts\/|watch\?v=)|youtu\.be\/).+/i;
     return youtubeRegex.test(url.trim());
+  };
+  
+  // Function to standardize YouTube URL format
+  const standardizeYouTubeUrl = (url: string) => {
+    // Ensure it has proper protocol
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      url = 'https://' + url;
+    }
+    
+    return url;
   };
 
   const handlePaste = async () => {

@@ -41,9 +41,12 @@ const Index = () => {
     try {
       toast.info("Searching for video...");
       
-      // Call our Supabase Edge Function
+      // Call our Supabase Edge Function with the correct format
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
-        body: { url }
+        body: { 
+          url: url,
+          format: format 
+        }
       });
       
       if (error) {

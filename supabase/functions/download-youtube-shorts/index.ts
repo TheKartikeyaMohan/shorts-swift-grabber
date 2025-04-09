@@ -48,18 +48,10 @@ serve(async (req: Request) => {
     }
 
     // Parse request body
-    const reqBody = await req.text();
-    console.log("Request body:", reqBody);
+    const reqBody = await req.json();
+    console.log("Request body:", JSON.stringify(reqBody));
     
-    let url;
-    try {
-      const json = JSON.parse(reqBody);
-      url = json.url;
-    } catch (parseError) {
-      console.error("Error parsing request body:", parseError);
-      throw new Error("Invalid request format: " + parseError.message);
-    }
-    
+    let url = reqBody.url;
     console.log("Processing URL:", url);
     
     // Validate URL format
@@ -71,25 +63,29 @@ serve(async (req: Request) => {
     const clientIp = req.headers.get("x-forwarded-for") || "unknown";
     console.log("Client IP:", clientIp);
 
-    // Log headers for debugging
+    // Log request headers for debugging
     console.log("Request headers:");
     for (const [key, value] of req.headers.entries()) {
       console.log(`${key}: ${value}`);
     }
 
-    // Call the NEW RapidAPI YouTube downloader
+    // Call the RapidAPI YouTube downloader with the new endpoint
     console.log("Fetching video data from RapidAPI");
-    console.log("RapidAPI URL: https://youtube-video-and-shorts-downloader.p.rapidapi.com/download");
     
-    // Prepare the correct endpoint and parameters
-    const downloadUrl = new URL("https://youtube-video-and-shorts-downloader.p.rapidapi.com/download");
+    // New API endpoint: youtube-video-and-shorts-downloader.p.rapidapi.com
+    const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/download";
+    console.log("RapidAPI URL:", apiUrl);
+
+    // Construct proper query parameters
+    const downloadUrl = new URL(apiUrl);
     downloadUrl.searchParams.append("id", url);
 
+    // Make the API request
     const apiResponse = await fetch(downloadUrl.toString(), {
       method: "GET",
       headers: {
-        "x-rapidapi-host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
-        "x-rapidapi-key": RAPIDAPI_KEY
+        "X-RapidAPI-Key": RAPIDAPI_KEY,
+        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com"
       }
     });
 
@@ -102,41 +98,49 @@ serve(async (req: Request) => {
     }
 
     const data = await apiResponse.json();
-    console.log("API data received:", JSON.stringify(data).substring(0, 200) + "...");
+    console.log("API data received:", JSON.stringify(data).substring(0, 500) + "...");
 
-    // Check if we have valid data
+    // Check if we have valid data in the expected format
     if (!data || !data.status || data.status !== "ok" || !data.results) {
       console.error("Invalid API response format:", JSON.stringify(data));
       throw new Error("Download link not found in API response");
     }
 
-    // Extract the appropriate video format - prefer high quality MP4 if available
+    // Extract the appropriate video format based on user's preference
+    const format = reqBody.format || "mp4";
     let downloadFormat = null;
     
-    // First try to find 720P MP4 video
-    downloadFormat = data.results.find(result => 
-      result.mime === "video/mp4" && result.quality === "720P60"
-    );
-    
-    // If not found, try 480P
-    if (!downloadFormat) {
-      downloadFormat = data.results.find(result => 
-        result.mime === "video/mp4" && result.quality === "480P"
-      );
-    }
-    
-    // If still not found, try 360P
-    if (!downloadFormat) {
-      downloadFormat = data.results.find(result => 
-        result.mime === "video/mp4" && result.quality === "360P"
-      );
-    }
-    
-    // If no video format found, use audio format
-    if (!downloadFormat) {
+    if (format === "mp3") {
+      // Find audio format
       downloadFormat = data.results.find(result => 
         result.mime.includes("audio") && result.has_audio
       );
+    } else {
+      // Try to find video with requested quality - prefer 720P for mp4
+      downloadFormat = data.results.find(result => 
+        result.mime === "video/mp4" && result.quality === "720P60"
+      );
+      
+      // If not found, try 480P
+      if (!downloadFormat) {
+        downloadFormat = data.results.find(result => 
+          result.mime === "video/mp4" && result.quality === "480P"
+        );
+      }
+      
+      // If still not found, try 360P
+      if (!downloadFormat) {
+        downloadFormat = data.results.find(result => 
+          result.mime === "video/mp4" && result.quality === "360P"
+        );
+      }
+      
+      // If no video format found, use any mp4
+      if (!downloadFormat) {
+        downloadFormat = data.results.find(result => 
+          result.mime === "video/mp4"
+        );
+      }
     }
     
     // If still no format found, just use the first result
@@ -164,6 +168,7 @@ serve(async (req: Request) => {
       video_url: url,
       download_url: videoData.downloadUrl,
       status: "success",
+      format: format,
       ip_address: clientIp
     });
 
@@ -185,10 +190,11 @@ serve(async (req: Request) => {
   } catch (error) {
     console.error("Error processing request:", error.message);
     
-    // If we have the URL from the request, log the error
+    // Try to log error to Supabase
     try {
-      const reqBody = await req.text();
-      const { url } = JSON.parse(reqBody);
+      const reqJson = await req.json();
+      const url = reqJson.url;
+      
       if (url) {
         // Log error to Supabase
         const { error: dbError } = await supabase.from("downloads").insert({

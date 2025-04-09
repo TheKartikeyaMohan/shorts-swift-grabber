@@ -1,9 +1,8 @@
 
 import { useState, useRef } from "react";
-import { Youtube, Clipboard, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { toast } from "sonner";
 
 interface SearchBarProps {
   onSearch: (url: string) => void;
@@ -18,7 +17,7 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
     e.preventDefault();
     
     if (!url.trim()) {
-      toast.error("Please enter a YouTube Shorts URL");
+      toast.error("Please enter a YouTube URL");
       return;
     }
     
@@ -36,59 +35,41 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
       const text = await navigator.clipboard.readText();
       if (text) {
         setUrl(text);
-        toast.success("URL pasted!");
       }
     } catch (error) {
       toast.error("Unable to paste. Please paste manually.");
-      // Focus the input for manual pasting
       inputRef.current?.focus();
     }
   };
 
-  const clearInput = () => {
-    setUrl("");
-    inputRef.current?.focus();
-  };
-
   return (
-    <div className="w-full max-w-xl mx-auto px-4">
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="youtube-search-container relative">
-          <Youtube className="youtube-icon text-youtube" />
+    <div className="w-full max-w-md mx-auto">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="relative">
           <Input
             ref={inputRef}
             type="text"
-            placeholder="Paste YouTube Shorts URL here"
+            placeholder="Paste YouTube URL here"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="youtube-search-input pr-20"
+            className="h-12 pl-4 pr-20 rounded-md border-muted/30 focus:border-muted/50 focus:ring-0"
             disabled={isLoading}
           />
-          {url ? (
-            <button 
-              type="button"
-              onClick={clearInput}
-              className="absolute right-14 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
-              disabled={isLoading}
-            >
-              <X size={18} />
-            </button>
-          ) : null}
           <button
             type="button"
             onClick={handlePaste}
-            className="absolute right-3 top-1/2 -translate-y-1/2 bg-muted hover:bg-muted/80 text-muted-foreground p-1.5 rounded-md transition-colors"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wider font-medium text-muted-foreground"
             disabled={isLoading}
           >
-            <Clipboard size={18} />
+            Paste
           </button>
         </div>
         <Button 
           type="submit" 
-          className="w-full bg-youtube hover:bg-youtube/90 text-white font-medium rounded-full py-6 h-auto text-lg"
+          className="w-full h-12 bg-black hover:bg-black/90 text-white font-medium rounded-md text-sm uppercase tracking-wider"
           disabled={isLoading}
         >
-          {isLoading ? "Processing..." : "Download Now"}
+          {isLoading ? "Processing..." : "Download"}
         </Button>
       </form>
     </div>

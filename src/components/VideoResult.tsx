@@ -1,9 +1,7 @@
 
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { useState } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 
 interface VideoInfo {
   title: string;
@@ -22,9 +20,9 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const downloadOptions = [
-    { label: "HD Video", quality: "720p", format: "mp4" },
-    { label: "SD Video", quality: "360p", format: "mp4" },
-    { label: "Audio Only", quality: "128kbps", format: "mp3" },
+    { label: "HD", quality: "720p", format: "mp4" },
+    { label: "SD", quality: "360p", format: "mp4" },
+    { label: "Audio", quality: "128kbps", format: "mp3" },
   ];
 
   const handleDownload = (quality: string, format: string) => {
@@ -32,9 +30,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
     
     // Simulate download success after 2 seconds
     setTimeout(() => {
-      toast.success(`Your ${format === 'mp3' ? 'audio' : 'video'} is ready!`, {
-        description: `Download started automatically.`,
-      });
+      toast.success(`Download started`);
       setDownloading(null);
       
       // Simulate opening a download link
@@ -44,7 +40,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   };
 
   return (
-    <Card className="w-full overflow-hidden shadow-md rounded-xl">
+    <div className="w-full max-w-md mx-auto border border-muted/20 rounded-md overflow-hidden bg-background">
       <div className="aspect-video relative overflow-hidden bg-black">
         <img 
           src={thumbnail} 
@@ -52,25 +48,24 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
           className="w-full h-full object-cover"
         />
         {duration && (
-          <div className="absolute bottom-2 right-2 bg-black/70 text-white px-1 py-0.5 text-xs rounded">
+          <div className="absolute bottom-2 right-2 bg-black/50 text-white px-1 py-0.5 text-xs rounded">
             {duration}
           </div>
         )}
       </div>
       
       <div className="p-4 space-y-4">
-        <h3 className="font-bold text-xl line-clamp-2">{title}</h3>
-        {author && <p className="text-sm text-muted-foreground">{author}</p>}
+        <h3 className="font-medium text-lg line-clamp-2">{title}</h3>
+        {author && <p className="text-xs text-muted-foreground">{author}</p>}
         
-        <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-4 pt-2">
+          <div className="flex gap-2">
             {downloadOptions.map((option) => (
               <Button
                 key={option.quality}
                 variant={selectedFormat === option.quality ? "default" : "outline"}
-                className={`h-14 ${selectedFormat === option.quality ? "bg-youtube hover:bg-youtube/90" : "border border-youtube/30 text-youtube hover:bg-youtube/10"}`}
+                className={`flex-1 h-10 ${selectedFormat === option.quality ? "bg-black hover:bg-black/90 text-white" : "border-muted/30 hover:bg-muted/10"}`}
                 onClick={() => setSelectedFormat(option.quality)}
-                size="lg"
               >
                 {option.label}
               </Button>
@@ -84,16 +79,14 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
                 handleDownload(option.quality, option.format);
               }
             }}
-            className="w-full bg-youtube hover:bg-youtube/90 h-14 rounded-full text-lg font-medium"
+            className="w-full bg-black hover:bg-black/90 text-white h-10 font-medium text-sm uppercase tracking-wider"
             disabled={!!downloading}
-            size="lg"
           >
-            <Download className="w-5 h-5 mr-2" />
-            {downloading ? "Starting Download..." : "Download Now"}
+            {downloading ? "Starting..." : "Download"}
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   );
 };
 

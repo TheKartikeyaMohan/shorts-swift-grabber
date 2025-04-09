@@ -1,7 +1,6 @@
 
-import { Youtube } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
 import { useState, useEffect } from "react";
+import { Progress } from "@/components/ui/progress";
 
 const LoadingState = () => {
   const [progress, setProgress] = useState(0);
@@ -28,17 +27,9 @@ const LoadingState = () => {
 
   return (
     <div className="flex flex-col items-center justify-center py-12 space-y-6">
-      <div className="relative">
-        <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center animate-pulse">
-          <Youtube className="w-12 h-12 text-youtube" />
-        </div>
-        <div className="absolute inset-0 border-4 border-t-youtube border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
-      </div>
-      
-      <div className="text-center space-y-4 w-full max-w-md">
-        <p className="text-lg font-medium">Finding your video...</p>
-        <Progress value={progress} className="h-3 rounded-full" />
-        <p className="text-sm text-muted-foreground">{progress < 80 ? "Analyzing video source..." : "Almost ready..."}</p>
+      <div className="w-full max-w-md">
+        <Progress value={progress} className="h-1 bg-muted/20" />
+        <p className="text-sm text-muted-foreground mt-2 text-center">Processing your video...</p>
       </div>
     </div>
   );

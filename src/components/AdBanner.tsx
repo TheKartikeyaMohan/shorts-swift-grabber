@@ -8,19 +8,19 @@ const AdBanner = ({ position }: AdBannerProps) => {
   const getAdStyles = () => {
     switch (position) {
       case 'top':
-        return 'h-12 my-4 bg-muted/20';
+        return 'h-8 my-4 bg-muted/10';
       case 'middle':
-        return 'h-16 my-6 bg-muted/20';
+        return 'h-10 my-6 bg-muted/10';
       case 'bottom':
-        return 'h-12 fixed bottom-0 left-0 w-full bg-muted/70 backdrop-blur-sm z-50 border-t';
+        return 'h-6 fixed bottom-0 left-0 w-full bg-muted/20 backdrop-blur-sm z-50';
       default:
-        return 'h-12 my-4 bg-muted/20';
+        return 'h-8 my-4 bg-muted/10';
     }
   };
 
   return (
-    <div className={`rounded-lg flex items-center justify-center ${getAdStyles()}`}>
-      <p className="text-xs text-muted-foreground">Ad Space</p>
+    <div className={`flex items-center justify-center ${getAdStyles()}`}>
+      <p className="text-xs text-muted-foreground">Ad</p>
     </div>
   );
 };

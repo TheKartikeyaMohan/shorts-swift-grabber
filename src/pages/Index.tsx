@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
@@ -28,8 +27,9 @@ interface VideoInfo {
   }>;
 }
 
-// Configuration
-const API_SERVER_URL = "http://localhost:3001"; // Replace with your actual server URL when deployed
+// Configuration - replace this with your actual server URL when deployed
+const API_SERVER_URL = process.env.API_SERVER_URL || "http://localhost:3001"; 
+const SERVER_HEALTH_TIMEOUT = 3000; // Shorter timeout for health check (3s)
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -43,12 +43,16 @@ const Index = () => {
   useEffect(() => {
     const checkExpressServer = async () => {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), SERVER_HEALTH_TIMEOUT);
+        
         const response = await fetch(`${API_SERVER_URL}/api/health`, { 
           method: 'GET',
           headers: { 'Content-Type': 'application/json' },
-          // Add timeout to avoid long wait if server is down
-          signal: AbortSignal.timeout(5000)
+          signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         if (response.ok) {
           const data = await response.json();
@@ -78,7 +82,7 @@ const Index = () => {
         await handleExpressDownload(url, format, quality);
       } else {
         // Fallback to Supabase Edge Function
-        await handleEdgeFunctionDownload(url, format);
+        await handleEdgeFunctionDownload(url, format, quality);
       }
     } catch (error) {
       console.error("Error processing download:", error);
@@ -144,19 +148,20 @@ const Index = () => {
     }
   };
 
-  const handleEdgeFunctionDownload = async (url: string, format: string) => {
+  const handleEdgeFunctionDownload = async (url: string, format: string, quality?: string) => {
     try {
-      // Call our Supabase Edge Function
+      // Call our Supabase Edge Function with format AND quality
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           url: url,
-          format: format 
+          format: format,
+          quality: quality || (format === 'mp4' ? '720p' : 'high')
         }
       });
       
       if (error) {
         console.error("Edge function error:", error);
-        throw new Error(error.message || "Failed to fetch video info");
+        throw new Error(error.message || "Failed to fetch video");
       }
       
       if (!data) {
@@ -166,6 +171,7 @@ const Index = () => {
       // Store the URL and format in localStorage for the download function
       localStorage.setItem("lastYoutubeUrl", url);
       localStorage.setItem("lastFormat", format);
+      if (quality) localStorage.setItem("lastQuality", quality);
       
       // Prepare video info from the response
       const videoData: VideoInfo = {
@@ -174,18 +180,19 @@ const Index = () => {
         duration: data.duration || "",
         author: data.author || "",
         downloadUrl: data.downloadUrl,
-        quality: data.quality || "",
+        quality: data.quality || quality || "",
         format: data.format || format,
         isAudio: data.isAudio || format === "mp3",
         formats: [
           { label: "HD", quality: "720p", format: "mp4" },
-          { label: "SD", quality: "360p", format: "mp4" },
-          { label: "Audio", quality: "128kbps", format: "mp3" },
+          { label: "SD", quality: "480p", format: "mp4" },
+          { label: "Low", quality: "360p", format: "mp4" },
+          { label: "Audio", quality: "high", format: "mp3" },
         ]
       };
       
       setVideoInfo(videoData);
-      toast.success("Video found!");
+      toast.success("Video ready for download!");
     } catch (error) {
       console.error("Edge function error:", error);
       throw error;

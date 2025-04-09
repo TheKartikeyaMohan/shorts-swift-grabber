@@ -49,7 +49,7 @@ const sanitizeFilename = (name) => {
     .substring(0, 100); // Limit length
 };
 
-// Helper function to log download attempts to Supabase (if possible)
+// Helper function to log download attempts to Supabase
 const logToSupabase = async (data) => {
   try {
     const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
@@ -86,15 +86,15 @@ app.post('/api/video-info', async (req, res) => {
   }
   
   const sanitizedUrl = sanitizeYouTubeUrl(url);
-  console.log(`Processing URL: ${sanitizedUrl}`);
+  console.log(`Processing URL for info: ${sanitizedUrl}`);
   
   try {
     const tempFileName = `info_${Date.now()}.json`;
     const tempFilePath = path.join(os.tmpdir(), tempFileName);
     
-    // Execute yt-dlp to get video info
+    // Execute yt-dlp to get video info with more detailed format information
     const ytdlpCommand = `yt-dlp --dump-json --no-playlist --no-check-certificate "${sanitizedUrl}" > "${tempFilePath}"`;
-    console.log(`Executing command: ${ytdlpCommand}`);
+    console.log(`Executing info command: ${ytdlpCommand}`);
     
     exec(ytdlpCommand, (error, stdout, stderr) => {
       if (error) {
@@ -131,11 +131,12 @@ app.post('/api/video-info', async (req, res) => {
           const seconds = Math.floor(durationSec % 60);
           const formattedDuration = `${minutes}:${seconds.toString().padStart(2, '0')}`;
           
-          // Available formats
+          // Available formats - improved to match what we display in frontend
           const formats = [
             { label: "HD", quality: "720p", format: "mp4" },
-            { label: "SD", quality: "360p", format: "mp4" },
-            { label: "Audio", quality: "128kbps", format: "mp3" }
+            { label: "SD", quality: "480p", format: "mp4" },
+            { label: "Low", quality: "360p", format: "mp4" },
+            { label: "Audio", quality: "high", format: "mp3" }
           ];
           
           // Log successful info fetch to Supabase
@@ -151,7 +152,9 @@ app.post('/api/video-info', async (req, res) => {
             thumbnail: info.thumbnail,
             duration: formattedDuration,
             author: info.uploader,
-            formats
+            formats,
+            // Include original formats for debugging
+            original_formats: info.formats ? info.formats.slice(0, 5) : []
           });
         } catch (parseError) {
           console.error(`Error parsing JSON: ${parseError.message}`);
@@ -252,6 +255,7 @@ app.post('/api/download', async (req, res) => {
         download_url: downloadUrl,
         status: 'success',
         format: format,
+        quality: quality || (format === 'mp3' ? 'high' : '720p'),
         ip_address: req.ip
       });
       
@@ -260,7 +264,7 @@ app.post('/api/download', async (req, res) => {
         downloadUrl,
         title: path.basename(filename, path.extname(filename)),
         format,
-        quality,
+        quality: quality || (format === 'mp3' ? 'high' : '720p'),
         isAudio: format === 'mp3'
       });
       

@@ -1,234 +1,329 @@
+
+// Download YouTube Shorts Edge Function
+// This function uses RapidAPI to handle YouTube video downloads
+// and returns the download URL to the client
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
 
-// Set CORS headers for the preflight request
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
-};
-
-// Create a Supabase client
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "https://yqkiwxlxmxrxyxekspht.supabase.co";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inlxa2l3eGx4bXhyeHl4ZWtzcGh0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDQxOTI1MjMsImV4cCI6MjA1OTc2ODUyM30.CaPAj_p6zsR6afXL2keNy9E2vN9o7uvhS-f0MFx-9Xc";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-const isValidYoutubeUrl = (url: string): boolean => {
-  return (
-    url.includes("youtube.com/shorts/") || 
-    url.includes("youtu.be/") ||
-    url.includes("youtube.com/watch")
-  );
-};
-
-// Helper function to determine if a format is audio only
-function isAudioFormat(mimeType: string): boolean {
-  return mimeType.startsWith('audio/');
+interface RequestBody {
+  url: string;
+  format: string;
+  quality?: string;
 }
 
-// Helper function to extract resolution from quality string
-function getResolutionValue(quality: string): number {
-  if (quality.includes('1080')) return 1080;
-  if (quality.includes('720')) return 720;
-  if (quality.includes('480')) return 480;
-  if (quality.includes('360')) return 360;
-  if (quality.includes('240')) return 240;
-  if (quality.includes('144')) return 144;
-  return 0;
+interface VideoFormats {
+  [key: string]: {
+    url: string;
+    quality: string;
+  }[];
 }
 
-// Helper function to select the best format based on user preference
-function selectBestFormat(results: any[], requestFormat: string): any {
-  if (!results || results.length === 0) {
+// Create Supabase client for logging operations
+const createSupabaseClient = () => {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const supabaseKey = Deno.env.get("SUPABASE_ANON_KEY");
+  
+  if (!supabaseUrl || !supabaseKey) {
+    console.error("Supabase environment variables are not set");
     return null;
   }
-
-  if (requestFormat === "mp3") {
-    // Looking for best audio quality
-    const audioFormats = results.filter(result => isAudioFormat(result.mime));
-    if (audioFormats.length === 0) return results[0];
-    
-    // Prefer MP3 if available, otherwise take any audio format
-    const mp3Format = audioFormats.find(format => format.mime.includes('mp3'));
-    return mp3Format || audioFormats[0];
-  } else {
-    // Looking for video with preferred resolution for MP4
-    // First filter by mime type to get the right container format
-    const videoFormats = results.filter(result => 
-      result.mime.includes('mp4') && !isAudioFormat(result.mime)
-    );
-    
-    if (videoFormats.length === 0) {
-      // Fallback to any format if no MP4 available
-      return results.find(result => !isAudioFormat(result.mime)) || results[0];
-    }
-
-    // Sort by resolution, prefer: 720p > 480p > 360p
-    const sortedFormats = videoFormats.sort((a, b) => {
-      const resA = getResolutionValue(a.quality);
-      const resB = getResolutionValue(b.quality);
-      
-      // Prefer exactly 720p
-      if (resA === 720 && resB !== 720) return -1;
-      if (resB === 720 && resA !== 720) return 1;
-      
-      // Otherwise, get as close to 720p as possible without going over
-      if (resA <= 720 && resB > 720) return -1;
-      if (resB <= 720 && resA > 720) return 1;
-      
-      // Both are either under or over 720p, choose the higher one
-      return resB - resA;
-    });
-
-    return sortedFormats[0];
-  }
-}
-
-serve(async (req: Request) => {
-  console.log("Function invoked:", new Date().toISOString());
   
-  // Handle CORS preflight requests
+  return createClient(supabaseUrl, supabaseKey);
+};
+
+// Log download operations to Supabase
+const logToSupabase = async (data: any) => {
+  try {
+    const supabase = createSupabaseClient();
+    if (!supabase) return;
+    
+    const { error } = await supabase
+      .from("downloads")
+      .insert([data]);
+      
+    if (error) {
+      console.error("Error logging to Supabase:", error);
+    }
+  } catch (error) {
+    console.error("Failed to log to Supabase:", error);
+  }
+};
+
+// Validate YouTube URL
+const isValidYouTubeUrl = (url: string): boolean => {
+  // Regex for various YouTube URL formats including shorts and regular videos
+  const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(shorts\/|watch\?v=)|youtu\.be\/).+/i;
+  return youtubeRegex.test(url.trim());
+};
+
+// Standardize YouTube URL format
+const standardizeYouTubeUrl = (url: string): string => {
+  // Ensure it has proper protocol
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  return url;
+};
+
+// Main function to handle requests
+serve(async (req) => {
+  // Set up CORS headers for cross-origin requests
+  const headers = new Headers({
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  });
+
+  // Handle preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      headers: corsHeaders,
-      status: 204,
-    });
+    return new Response(null, { status: 204, headers });
+  }
+
+  // Ensure this is a POST request
+  if (req.method !== "POST") {
+    return new Response(
+      JSON.stringify({ error: "Method not allowed" }),
+      { status: 405, headers }
+    );
   }
 
   try {
-    // Get RapidAPI key
-    const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
-    
-    if (!RAPIDAPI_KEY) {
-      throw new Error("RAPIDAPI_KEY is not set in environment variables");
-    }
-
     // Parse request body
-    const reqBody = await req.json();
-    const url = reqBody.url;
-    const requestedFormat = reqBody.format || "mp4";
+    const body: RequestBody = await req.json();
+    const { url, format } = body;
+    let { quality } = body;
     
-    // Validate URL format
-    if (!url || !isValidYoutubeUrl(url)) {
-      throw new Error("Invalid YouTube URL");
+    // Input validation
+    if (!url) {
+      return new Response(
+        JSON.stringify({ error: "URL is required" }),
+        { status: 400, headers }
+      );
+    }
+    
+    if (!format || !["mp4", "mp3"].includes(format)) {
+      return new Response(
+        JSON.stringify({ error: "Valid format (mp4 or mp3) is required" }),
+        { status: 400, headers }
+      );
+    }
+    
+    // Validate YouTube URL
+    if (!isValidYouTubeUrl(url)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid YouTube URL" }),
+        { status: 400, headers }
+      );
+    }
+    
+    // Standardize URL and log client IP
+    const standardUrl = standardizeYouTubeUrl(url.trim());
+    const clientIP = req.headers.get("x-forwarded-for") || "unknown";
+    
+    // Set default quality if not provided
+    if (!quality) {
+      quality = format === "mp4" ? "720p" : "high";
+    }
+    
+    console.log(`Processing ${format} download for: ${standardUrl}, quality: ${quality}`);
+    
+    // Get RapidAPI key from environment
+    const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
+    if (!rapidApiKey) {
+      console.error("RAPIDAPI_KEY not found in environment");
+      
+      await logToSupabase({
+        video_url: standardUrl,
+        status: "error",
+        format,
+        error_message: "RAPIDAPI_KEY not set",
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: "API configuration error" }),
+        { status: 500, headers }
+      );
     }
 
-    // Get client IP for logging
-    const clientIp = req.headers.get("x-forwarded-for") || "unknown";
-
-    // Call the RapidAPI YouTube downloader
-    console.log(`Fetching video data from RapidAPI for format: ${requestedFormat}`);
-    
-    // API endpoint for YouTube video and shorts downloader
+    // Make request to RapidAPI
     const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/download";
-    
-    // Construct proper query parameters
-    const downloadUrl = new URL(apiUrl);
-    downloadUrl.searchParams.append("id", url);
-
-    // Make the API request
-    const apiResponse = await fetch(downloadUrl.toString(), {
-      method: "GET",
+    const apiResponse = await fetch(apiUrl, {
+      method: "POST",
       headers: {
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com"
-      }
+        "Content-Type": "application/json",
+        "X-RapidAPI-Key": rapidApiKey,
+        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
+      },
+      body: JSON.stringify({ url: standardUrl }),
     });
 
-    console.log("API response status:", apiResponse.status);
-
+    // Handle API errors
     if (!apiResponse.ok) {
       const errorText = await apiResponse.text();
-      console.error("API error response:", errorText);
-      throw new Error(`API error: ${apiResponse.status} - ${errorText}`);
+      console.error(`RapidAPI error (${apiResponse.status}): ${errorText}`);
+      
+      await logToSupabase({
+        video_url: standardUrl,
+        status: "error",
+        format,
+        error_message: `API error: ${apiResponse.status} - ${errorText}`,
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: `API error: ${apiResponse.status} - ${errorText}` }),
+        { status: 500, headers }
+      );
     }
 
+    // Parse API response
     const data = await apiResponse.json();
-
-    // Check if we have valid data in the expected format
-    if (!data || !data.status || data.status !== "ok" || !data.results || !data.results.length) {
-      console.error("Invalid API response format:", JSON.stringify(data));
-      throw new Error("Download link not found in API response");
-    }
-
-    // Select the best format based on user preference
-    const downloadFormat = selectBestFormat(data.results, requestedFormat);
     
-    if (!downloadFormat || !downloadFormat.url) {
-      throw new Error("No suitable download format found");
+    if (!data || !data.formats) {
+      console.error("Invalid API response:", data);
+      
+      await logToSupabase({
+        video_url: standardUrl,
+        status: "error",
+        format,
+        error_message: "Invalid API response format",
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: "Invalid API response" }),
+        { status: 500, headers }
+      );
     }
 
-    // Prepare video data to return
-    const videoData = {
-      downloadUrl: downloadFormat.url,
+    console.log("Received formats:", Object.keys(data.formats));
+    
+    // Process formats based on requested format type
+    let downloadUrl = "";
+    let selectedQuality = "";
+    const isAudio = format === "mp3";
+    
+    if (isAudio) {
+      // Handle audio format (mp3)
+      if (data.formats.audio && data.formats.audio.length > 0) {
+        // Find highest quality audio
+        const audioFormats = data.formats.audio;
+        downloadUrl = audioFormats[0].url; // Default to first one
+        selectedQuality = "high";
+        
+        // Try to find mp3 format if available
+        const mp3Format = audioFormats.find((f: any) => 
+          f.extension === "mp3" || f.mimeType?.includes("audio/mp3"));
+          
+        if (mp3Format) {
+          downloadUrl = mp3Format.url;
+        }
+      }
+    } else {
+      // Handle video format (mp4)
+      const videoFormats = data.formats.video || [];
+      
+      // Try to find format matching requested quality
+      if (quality === "720p") {
+        // Look for 720p first
+        const hdFormat = videoFormats.find((f: any) => 
+          f.quality?.includes("720") || f.height === 720);
+          
+        if (hdFormat) {
+          downloadUrl = hdFormat.url;
+          selectedQuality = "720p";
+        }
+      } 
+      
+      // If no URL yet and looking for 480p 
+      if (!downloadUrl && (quality === "480p" || quality === "720p")) {
+        const sdFormat = videoFormats.find((f: any) => 
+          f.quality?.includes("480") || f.height === 480);
+          
+        if (sdFormat) {
+          downloadUrl = sdFormat.url;
+          selectedQuality = "480p";
+        }
+      }
+      
+      // If still no URL, fall back to 360p or any available format
+      if (!downloadUrl) {
+        const lowFormat = videoFormats.find((f: any) => 
+          f.quality?.includes("360") || f.height === 360);
+          
+        if (lowFormat) {
+          downloadUrl = lowFormat.url;
+          selectedQuality = "360p";
+        } else if (videoFormats.length > 0) {
+          // Last resort: use the first available video format
+          downloadUrl = videoFormats[0].url;
+          selectedQuality = videoFormats[0].quality || "unknown";
+        }
+      }
+    }
+
+    // Verify we have a download URL
+    if (!downloadUrl) {
+      console.error(`No ${format} URL found in formats:`, data.formats);
+      
+      await logToSupabase({
+        video_url: standardUrl,
+        status: "error",
+        format,
+        error_message: `No ${format} URL found in available formats`,
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: `No ${format} URL found in available formats` }),
+        { status: 404, headers }
+      );
+    }
+
+    // Prepare success response
+    const result = {
       title: data.title || "YouTube Video",
       thumbnail: data.thumbnail || "",
       duration: data.duration || "",
       author: data.author || "",
-      quality: downloadFormat.quality || "",
-      format: downloadFormat.mime.split('/')[1] || "",
-      isAudio: isAudioFormat(downloadFormat.mime)
+      downloadUrl,
+      quality: selectedQuality,
+      format,
+      isAudio,
     };
 
     // Log successful download to Supabase
-    const { error: dbError } = await supabase.from("downloads").insert({
-      video_url: url,
-      download_url: videoData.downloadUrl,
+    await logToSupabase({
+      video_url: standardUrl,
+      download_url: downloadUrl,
       status: "success",
-      format: requestedFormat,
-      ip_address: clientIp
+      format,
+      quality: selectedQuality,
+      ip_address: clientIP,
     });
 
-    if (dbError) {
-      console.error("Error logging to database:", dbError);
-    }
-
-    console.log("Download successful:", videoData.title);
-    
-    // Return successful response with video data
-    return new Response(
-      JSON.stringify(videoData),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
-
+    // Return successful response
+    return new Response(JSON.stringify(result), { status: 200, headers });
   } catch (error) {
-    console.error("Error processing request:", error.message);
+    console.error("Edge function error:", error);
     
-    // Try to log error to Supabase
+    // Attempt to log error
     try {
-      const reqJson = await req.json().catch(() => ({}));
-      const url = reqJson.url;
-      
-      if (url) {
-        // Log error to Supabase
-        const { error: dbError } = await supabase.from("downloads").insert({
-          video_url: url,
-          status: "error",
-          error_message: error.message,
-          ip_address: req.headers.get("x-forwarded-for") || "unknown",
-          format: reqJson.format || "unknown"
-        });
-        
-        if (dbError) {
-          console.error("Error logging to database:", dbError);
-        }
-      }
+      await logToSupabase({
+        status: "error",
+        error_message: `Edge function error: ${error.message || "Unknown error"}`,
+        ip_address: req.headers.get("x-forwarded-for") || "unknown",
+      });
     } catch (logError) {
-      console.error("Error logging to Supabase:", logError);
+      console.error("Failed to log error:", logError);
     }
-
-    // Return error response
+    
     return new Response(
-      JSON.stringify({ 
-        error: error.message || "Failed to process video" 
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      }
+      JSON.stringify({ error: "Internal server error", details: error.message }),
+      { status: 500, headers }
     );
   }
 });

@@ -1,5 +1,6 @@
+
 // Download YouTube Shorts Edge Function
-// This function uses RapidAPI to handle YouTube video downloads
+// This function uses a YouTube downloader API to handle video downloads
 // and returns the download URL to the client
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -12,12 +13,13 @@ interface RequestBody {
   getDirectLink?: boolean;
 }
 
-interface VideoFormats {
-  [key: string]: {
-    url: string;
-    quality: string;
-  }[];
-}
+// Set up CORS headers for cross-origin requests
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Content-Type': 'application/json'
+};
 
 // Create Supabase client for logging operations
 const createSupabaseClient = () => {
@@ -52,130 +54,27 @@ const logToSupabase = async (data: any) => {
 
 // Validate YouTube URL
 const isValidYouTubeUrl = (url: string): boolean => {
-  // Regex for various YouTube URL formats including shorts and regular videos
   const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(shorts\/|watch\?v=)|youtu\.be\/).+/i;
   return youtubeRegex.test(url.trim());
 };
 
 // Standardize YouTube URL format
 const standardizeYouTubeUrl = (url: string): string => {
-  // Ensure it has proper protocol
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
   return url;
 };
 
-// Helper to extract video ID from YouTube URL
+// Extract video ID from YouTube URL
 const extractVideoId = (url: string): string | null => {
   const regex = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]+)/;
   const match = url.match(regex);
   return match ? match[1] : null;
 };
 
-// Helper to find the best direct download URL from formats
-const findBestDownloadUrl = (formats: any, requestedFormat: string, requestedQuality: string): string | null => {
-  console.log(`Looking for best download URL for format: ${requestedFormat}, quality: ${requestedQuality}`);
-  
-  let bestUrl: string | null = null;
-  
-  if (requestedFormat === "mp3") {
-    // For audio, look in audio formats
-    if (formats.audio && formats.audio.length > 0) {
-      console.log(`Found ${formats.audio.length} audio formats`);
-      
-      // Try to find mp3 format first
-      const mp3Format = formats.audio.find((f: any) => 
-        f.extension === "mp3" || f.mimeType?.includes("audio/mp3"));
-        
-      if (mp3Format && mp3Format.url) {
-        console.log(`Found MP3 format with URL: ${mp3Format.url.substring(0, 100)}...`);
-        bestUrl = mp3Format.url;
-      } else {
-        // Otherwise take the first audio format
-        console.log(`No MP3 found, using first audio format: ${formats.audio[0].url.substring(0, 100)}...`);
-        bestUrl = formats.audio[0].url;
-      }
-    }
-  } else {
-    // For video, look in video formats
-    if (formats.video && formats.video.length > 0) {
-      console.log(`Found ${formats.video.length} video formats`);
-      
-      // Log all available formats for debugging
-      formats.video.forEach((f: any, i: number) => {
-        console.log(`Format ${i}: Quality: ${f.quality}, Height: ${f.height}, Extension: ${f.extension}, HasURL: ${!!f.url}`);
-      });
-      
-      // First try to find the exact requested quality
-      let matchedFormat: any;
-      
-      if (requestedQuality === "720p") {
-        matchedFormat = formats.video.find((f: any) => 
-          (f.quality?.includes("720") || f.height === 720) && f.url);
-      } else if (requestedQuality === "480p") {
-        matchedFormat = formats.video.find((f: any) => 
-          (f.quality?.includes("480") || f.height === 480) && f.url);
-      } else if (requestedQuality === "360p") {
-        matchedFormat = formats.video.find((f: any) => 
-          (f.quality?.includes("360") || f.height === 360) && f.url);
-      }
-      
-      if (matchedFormat && matchedFormat.url) {
-        console.log(`Found exact quality match (${requestedQuality}): ${matchedFormat.url.substring(0, 100)}...`);
-        bestUrl = matchedFormat.url;
-      } else {
-        // If exact quality not found, get the best available
-        // Filter to only formats with URLs
-        const availableFormats = formats.video.filter((f: any) => f.url);
-        
-        if (availableFormats.length > 0) {
-          // Sort by height (quality) descending
-          availableFormats.sort((a: any, b: any) => {
-            // If height is available, use it
-            if (a.height && b.height) {
-              return b.height - a.height;
-            }
-            // Otherwise try to parse from quality string
-            const aMatch = a.quality?.match(/(\d+)p/);
-            const bMatch = b.quality?.match(/(\d+)p/);
-            
-            if (aMatch && bMatch) {
-              return parseInt(bMatch[1]) - parseInt(aMatch[1]);
-            }
-            
-            // Default to the first one
-            return 0;
-          });
-          
-          console.log(`No exact match found, using best available: ${availableFormats[0].quality}, URL: ${availableFormats[0].url.substring(0, 100)}...`);
-          bestUrl = availableFormats[0].url;
-        }
-      }
-    }
-  }
-  
-  if (!bestUrl) {
-    // Last resort - look for a direct download URL in the response root
-    if (formats.url) {
-      console.log(`No format-specific URL found, using root URL: ${formats.url.substring(0, 100)}...`);
-      bestUrl = formats.url;
-    }
-  }
-  
-  return bestUrl;
-};
-
 // Main function to handle requests
 serve(async (req) => {
-  // Set up CORS headers for cross-origin requests
-  const corsHeaders = new Headers({
-    "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-client-info, apikey",
-  });
-
   // Handle preflight requests
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders });
@@ -249,230 +148,101 @@ serve(async (req) => {
       );
     }
 
-    // Make request to RapidAPI using GET with the url as a query parameter
-    const queryUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download?id=${encodeURIComponent(standardUrl)}`;
-    console.log(`Calling RapidAPI with: ${queryUrl}`);
+    // Use Y2Mate API for more reliable direct download links
+    const apiUrl = "https://y2mate-api.onrender.com/api/convert";
+    console.log(`Calling Y2Mate API with video ID: ${videoId}`);
     
     try {
-      const apiResponse = await fetch(queryUrl, {
-        method: "GET",
+      const apiResponse = await fetch(apiUrl, {
+        method: "POST",
         headers: {
-          "X-RapidAPI-Key": rapidApiKey,
-          "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          url: standardUrl,
+          quality: quality === "720p" ? "720" : quality === "480p" ? "480" : "360",
+          format: format === "mp3" ? "mp3" : "mp4"
+        }),
       });
 
       // Handle API errors
       if (!apiResponse.ok) {
         const errorText = await apiResponse.text();
-        console.error(`RapidAPI error (${apiResponse.status}): ${errorText}`);
+        console.error(`Y2Mate API error (${apiResponse.status}): ${errorText}`);
         
-        await logToSupabase({
-          video_url: standardUrl,
-          status: "error",
-          format,
-          error_message: `API error: ${apiResponse.status} - ${errorText}`,
-          ip_address: clientIP,
-        });
-        
-        return new Response(
-          JSON.stringify({ error: `API error: ${apiResponse.status} - ${errorText}` }),
-          { status: 500, headers: corsHeaders }
-        );
+        // Fallback to RapidAPI
+        console.log("Falling back to RapidAPI...");
+        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
       }
 
       // Parse API response
       const data = await apiResponse.json();
-      console.log("API Response structure:", Object.keys(data));
+      console.log("Y2Mate API Response:", data);
       
-      if (!data || !data.formats) {
-        console.error("Invalid API response:", data);
+      if (!data || !data.url) {
+        console.error("Invalid Y2Mate API response:", data);
         
-        await logToSupabase({
-          video_url: standardUrl,
-          status: "error",
-          format,
-          error_message: "Invalid API response format",
-          ip_address: clientIP,
+        // Fallback to RapidAPI if no download URL
+        console.log("No direct URL in Y2Mate response, falling back to RapidAPI...");
+        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
+      }
+
+      // Y2Mate API returns direct download URLs
+      const directUrl = data.url;
+      
+      // Test if the URL is actually accessible
+      try {
+        const testResponse = await fetch(directUrl, { 
+          method: 'HEAD',
+          headers: { 'User-Agent': 'Mozilla/5.0' }
         });
         
-        return new Response(
-          JSON.stringify({ error: "Invalid API response" }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
-
-      console.log("Received format types:", Object.keys(data.formats));
-      
-      // Process formats based on requested format type
-      let downloadUrl = "";
-      let directUrl = "";
-      let selectedQuality = "";
-      const isAudio = format === "mp3";
-      
-      // Find the traditional download URL (might not be direct)
-      if (isAudio) {
-        // Handle audio format (mp3)
-        if (data.formats.audio && data.formats.audio.length > 0) {
-          // Find highest quality audio
-          const audioFormats = data.formats.audio;
-          downloadUrl = audioFormats[0].url; // Default to first one
-          selectedQuality = "high";
-          
-          // Try to find mp3 format if available
-          const mp3Format = audioFormats.find((f: any) => 
-            f.extension === "mp3" || f.mimeType?.includes("audio/mp3"));
-            
-          if (mp3Format && mp3Format.url) {
-            downloadUrl = mp3Format.url;
-          }
-        }
-      } else {
-        // Handle video format (mp4)
-        const videoFormats = data.formats.video || [];
-        
-        // Try to find format matching requested quality
-        if (quality === "720p") {
-          // Look for 720p first
-          const hdFormat = videoFormats.find((f: any) => 
-            f.quality?.includes("720") || f.height === 720);
-            
-          if (hdFormat && hdFormat.url) {
-            downloadUrl = hdFormat.url;
-            selectedQuality = "720p";
-          }
-        } 
-        
-        // If no URL yet and looking for 480p 
-        if (!downloadUrl && (quality === "480p" || quality === "720p")) {
-          const sdFormat = videoFormats.find((f: any) => 
-            f.quality?.includes("480") || f.height === 480);
-            
-          if (sdFormat && sdFormat.url) {
-            downloadUrl = sdFormat.url;
-            selectedQuality = "480p";
-          }
+        if (!testResponse.ok) {
+          console.error(`Direct URL test failed: ${testResponse.status}`);
+          // Fallback to RapidAPI if URL test fails
+          return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
         }
         
-        // If still no URL, fall back to 360p or any available format
-        if (!downloadUrl) {
-          const lowFormat = videoFormats.find((f: any) => 
-            f.quality?.includes("360") || f.height === 360);
-            
-          if (lowFormat && lowFormat.url) {
-            downloadUrl = lowFormat.url;
-            selectedQuality = "360p";
-          } else if (videoFormats.length > 0 && videoFormats[0].url) {
-            // Last resort: use the first available video format
-            downloadUrl = videoFormats[0].url;
-            selectedQuality = videoFormats[0].quality || "unknown";
-          }
-        }
-      }
-
-      // Check for direct download URL
-      // This is the key addition that tries to find direct download links for files
-      directUrl = findBestDownloadUrl(data.formats, format, quality) || "";
-      
-      // If we're specifically requesting a direct download link and couldn't find one,
-      // try to use alternate endpoints or fallbacks from the API response
-      if (getDirectLink && !directUrl) {
-        // Look for a "url" field at the top level of the response
-        if (data.url) {
-          console.log(`Using top-level URL as direct URL: ${data.url.substring(0, 100)}...`);
-          directUrl = data.url;
-        }
-        
-        // Check if there are download links in other structures
-        if (data.download_links && Array.isArray(data.download_links)) {
-          console.log(`Found ${data.download_links.length} download links`);
-          
-          // Find a suitable download link based on format
-          const matchingLink = data.download_links.find((link: any) => {
-            if (isAudio) {
-              return link.type === "audio" || link.format === "mp3";
-            } else {
-              return link.type === "video" || link.format === "mp4";
-            }
-          });
-          
-          if (matchingLink && matchingLink.url) {
-            console.log(`Found matching download link: ${matchingLink.url.substring(0, 100)}...`);
-            directUrl = matchingLink.url;
-          } else if (data.download_links.length > 0 && data.download_links[0].url) {
-            console.log(`Using first download link: ${data.download_links[0].url.substring(0, 100)}...`);
-            directUrl = data.download_links[0].url;
-          }
-        }
-      }
-
-      // Verify we have at least one URL
-      if (!downloadUrl && !directUrl) {
-        console.error(`No ${format} URL found in formats:`, data.formats);
-        
-        await logToSupabase({
-          video_url: standardUrl,
-          status: "error",
-          format,
-          error_message: `No ${format} URL found in available formats`,
-          ip_address: clientIP,
-        });
-        
-        return new Response(
-          JSON.stringify({ error: `No ${format} URL found in available formats` }),
-          { status: 404, headers: corsHeaders }
-        );
+        console.log("Direct URL test successful!");
+      } catch (testError) {
+        console.error("Error testing direct URL:", testError);
+        // Continue anyway as some servers might block HEAD requests
       }
 
       // Prepare success response with download URLs
       const result = {
         title: data.title || "YouTube Video",
-        thumbnail: data.thumbnail || "",
+        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
         duration: data.duration || "",
-        author: data.author || "",
-        downloadUrl: downloadUrl || directUrl, // Fallback to directUrl if downloadUrl is empty
-        directUrl: directUrl, // Explicitly provide the direct URL separately
-        quality: selectedQuality,
+        author: data.channel || "",
+        downloadUrl: directUrl,
+        directUrl: directUrl, // Same as downloadUrl since it's already direct
+        quality: quality || "",
         format,
-        isAudio,
+        isAudio: format === "mp3",
       };
 
       console.log("Successful response with URLs:");
-      console.log("- downloadUrl length:", (downloadUrl || "").length);
-      console.log("- directUrl length:", (directUrl || "").length);
-      
-      // For debugging only - don't log full URLs in production
-      if (downloadUrl) console.log("- downloadUrl sample:", downloadUrl.substring(0, 50) + "...");
-      if (directUrl) console.log("- directUrl sample:", directUrl.substring(0, 50) + "...");
+      console.log("- directUrl sample:", directUrl.substring(0, 50) + "...");
 
       // Log successful download to Supabase
       await logToSupabase({
         video_url: standardUrl,
-        download_url: (directUrl || downloadUrl).substring(0, 100) + "...", // Only log part of URL for privacy
+        download_url: directUrl.substring(0, 100) + "...", // Only log part of URL for privacy
         status: "success",
         format,
-        quality: selectedQuality,
+        quality: quality || "",
         ip_address: clientIP,
       });
 
       // Return successful response with the URLs
       return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
     } catch (apiError) {
-      console.error("API request error:", apiError);
+      console.error("Y2Mate API request error:", apiError);
       
-      // Log API error
-      await logToSupabase({
-        video_url: standardUrl,
-        status: "error",
-        format,
-        error_message: `API request error: ${apiError.message || "Unknown error"}`,
-        ip_address: clientIP,
-      });
-      
-      return new Response(
-        JSON.stringify({ error: "API request failed", details: apiError.message }),
-        { status: 500, headers: corsHeaders }
-      );
+      // Fallback to RapidAPI
+      console.log("Error with Y2Mate API, falling back to RapidAPI...");
+      return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
     }
   } catch (error) {
     console.error("Edge function error:", error);
@@ -494,3 +264,113 @@ serve(async (req) => {
     );
   }
 });
+
+// Function to use RapidAPI as fallback
+async function useRapidAPIFallback(apiKey: string, url: string, format: string, quality: string, clientIP: string, corsHeaders: any) {
+  const queryUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/api/convert`;
+  console.log(`Calling RapidAPI with URL: ${url}`);
+  
+  try {
+    const apiResponse = await fetch(queryUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-RapidAPI-Key": apiKey,
+        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
+      },
+      body: JSON.stringify({
+        url: url,
+        quality: quality === "720p" ? "720" : quality === "480p" ? "480" : "360",
+        format: format
+      })
+    });
+
+    // Handle API errors
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      console.error(`RapidAPI error (${apiResponse.status}): ${errorText}`);
+      
+      await logToSupabase({
+        video_url: url,
+        status: "error",
+        format,
+        error_message: `API error: ${apiResponse.status} - ${errorText}`,
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: `API error: ${apiResponse.status} - ${errorText}` }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // Parse API response
+    const data = await apiResponse.json();
+    console.log("RapidAPI Response:", data);
+    
+    if (!data || !data.url) {
+      console.error("Invalid RapidAPI response:", data);
+      
+      await logToSupabase({
+        video_url: url,
+        status: "error",
+        format,
+        error_message: "Invalid API response format",
+        ip_address: clientIP,
+      });
+      
+      return new Response(
+        JSON.stringify({ error: "Invalid API response" }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // Extract direct download URL
+    const directUrl = data.url;
+    const videoId = extractVideoId(url);
+    
+    // Prepare success response
+    const result = {
+      title: data.title || "YouTube Video",
+      thumbnail: data.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      duration: data.duration || "",
+      author: data.channel || "",
+      downloadUrl: directUrl,
+      directUrl: directUrl,
+      quality: quality,
+      format,
+      isAudio: format === "mp3",
+    };
+
+    console.log("Successful response with RapidAPI URLs:");
+    console.log("- directUrl sample:", directUrl.substring(0, 50) + "...");
+
+    // Log successful download to Supabase
+    await logToSupabase({
+      video_url: url,
+      download_url: directUrl.substring(0, 100) + "...",
+      status: "success",
+      format,
+      quality,
+      ip_address: clientIP,
+    });
+
+    // Return successful response with the URLs
+    return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
+  } catch (error) {
+    console.error("RapidAPI request error:", error);
+      
+    await logToSupabase({
+      video_url: url,
+      status: "error",
+      format,
+      error_message: `RapidAPI error: ${error.message || "Unknown error"}`,
+      ip_address: clientIP,
+    });
+    
+    return new Response(
+      JSON.stringify({ error: "API request failed", details: error.message }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
+}

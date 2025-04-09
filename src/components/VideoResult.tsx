@@ -59,28 +59,47 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Download error:", errorData);
-        throw new Error(errorData.error || "Download failed");
+        let errorMessage = "Download failed";
+        try {
+          const errorData = await response.json();
+          console.error("Download error details:", errorData);
+          errorMessage = errorData.error || "Download failed";
+        } catch (e) {
+          console.error("Error parsing error response:", e);
+        }
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
       
-      // Create a hidden link and click it to start the download
-      if (data.downloadUrl) {
-        const link = document.createElement("a");
-        link.href = data.downloadUrl;
-        link.download = `${title || 'youtube_video'}.${format}`;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        toast.success("Download started");
-      } else {
+      // Check if we have a valid download URL
+      if (!data.downloadUrl) {
         throw new Error("No download URL provided");
       }
+      
+      console.log("Download URL received:", data.downloadUrl);
+      
+      // Create a hidden link and click it to start the download
+      const link = document.createElement("a");
+      link.href = data.downloadUrl;
+      link.download = `${title || 'youtube_video'}.${format}`;
+      
+      // Important: When using the proxy, make sure the URL is correct
+      if (!link.href.startsWith('http')) {
+        const baseUrl = window.location.origin;
+        link.href = `${baseUrl}${data.downloadUrl}`;
+      }
+      
+      console.log("Final download link:", link.href);
+      
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Download started");
+      
     } catch (error) {
       console.error("Download error:", error);
       toast.error(error instanceof Error ? error.message : "Download failed");

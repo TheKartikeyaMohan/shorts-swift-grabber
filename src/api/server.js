@@ -5,7 +5,7 @@
 const express = require('express');
 const cors = require('cors');
 const { exec } = require('child_process');
-const fs = require('fs');
+const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const bodyParser = require('body-parser');
@@ -20,9 +20,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // Create downloads directory if it doesn't exist
 const downloadsDir = path.join(__dirname, 'public', 'downloads');
-if (!fs.existsSync(downloadsDir)) {
-  fs.mkdirSync(downloadsDir, { recursive: true });
-}
+fs.ensureDirSync(downloadsDir); // Use fs-extra to ensure directory exists
+
+console.log(`Server starting with downloads directory: ${downloadsDir}`);
+console.log(`__dirname is: ${__dirname}`);
+console.log(`Absolute path to downloads: ${path.resolve(downloadsDir)}`);
 
 // Helper function to sanitize YouTube URLs
 const sanitizeYouTubeUrl = (url) => {
@@ -126,6 +128,8 @@ app.post('/api/download', async (req, res) => {
     const filename = `video_${timestamp}.${format}`;
     const outputPath = path.join(downloadsDir, filename);
     
+    console.log(`Will save to: ${outputPath}`);
+    
     let command;
     
     // Build download command based on format and quality
@@ -148,7 +152,6 @@ app.post('/api/download', async (req, res) => {
       }
       
       console.log(`Download stdout: ${stdout}`);
-      console.log(`Download successful: ${outputPath}`);
       
       // Check if file exists
       if (!fs.existsSync(outputPath)) {
@@ -156,8 +159,17 @@ app.post('/api/download', async (req, res) => {
         return res.status(500).json({ error: 'File not created' });
       }
       
+      const stats = fs.statSync(outputPath);
+      console.log(`File size: ${stats.size} bytes`);
+      
+      if (stats.size === 0) {
+        fs.unlinkSync(outputPath);
+        return res.status(500).json({ error: 'Downloaded file is empty' });
+      }
+      
       // Return the download URL
-      const downloadUrl = `/downloads/${filename}`;
+      const downloadUrl = `/api/downloads/${filename}`;
+      console.log(`Download URL provided: ${downloadUrl}`);
       res.json({ downloadUrl });
       
       // Set up cleanup task for downloaded file (after 1 hour)
@@ -177,9 +189,36 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
+// New route to serve downloads directly
+app.get('/api/downloads/:filename', (req, res) => {
+  const { filename } = req.params;
+  const filePath = path.join(downloadsDir, filename);
+  
+  console.log(`Download request for: ${filePath}`);
+  
+  if (!fs.existsSync(filePath)) {
+    console.error(`File not found: ${filePath}`);
+    return res.status(404).json({ error: 'File not found' });
+  }
+  
+  res.download(filePath, (err) => {
+    if (err) {
+      console.error(`Error sending file: ${err.message}`);
+      if (!res.headersSent) {
+        return res.status(500).json({ error: 'Error sending file' });
+      }
+    }
+  });
+});
+
 // Route to check if server is running
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'API server is running' });
+  res.json({ 
+    status: 'ok', 
+    message: 'API server is running',
+    downloadsDir: downloadsDir,
+    dirExists: fs.existsSync(downloadsDir)
+  });
 });
 
 // Start server

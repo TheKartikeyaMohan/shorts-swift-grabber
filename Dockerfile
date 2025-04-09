@@ -22,14 +22,12 @@ COPY package-lock.json ./package-lock.json
 # Install backend dependencies
 RUN npm install
 
-# Create necessary directories
-RUN mkdir -p src/api/public/downloads
+# Create necessary directories with proper permissions
+RUN mkdir -p src/api/public/downloads && \
+    chmod -R 777 src/api/public/downloads
 
 # Copy source code
 COPY src/api ./src/api
-
-# Make public directory accessible
-RUN chmod 777 src/api/public/downloads
 
 # Expose port
 EXPOSE 3001

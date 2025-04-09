@@ -9,19 +9,39 @@ import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ShieldCheck, IndianRupee } from "lucide-react";
+import { ShieldCheck, IndianRupee, AlertCircle } from "lucide-react";
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<any>(null);
+  const [backendError, setBackendError] = useState<string | null>(null);
   const isMobile = useIsMobile();
 
   const handleSearch = async (url: string) => {
     setIsLoading(true);
     setVideoInfo(null);
+    setBackendError(null);
     
     try {
       toast.info("Searching for video...");
+      
+      // Check if backend is available
+      try {
+        const healthCheck = await fetch("/api/health", { 
+          method: "GET",
+          headers: { "Content-Type": "application/json" }
+        });
+        
+        if (!healthCheck.ok) {
+          throw new Error("Backend server is not available");
+        }
+        
+        console.log("Backend health check passed");
+      } catch (error) {
+        console.error("Backend health check failed:", error);
+        setBackendError("Cannot connect to the download server. Please make sure it's running.");
+        throw new Error("Backend server is not available");
+      }
       
       // Make a request to our backend API
       const response = await fetch("/api/video-info", {
@@ -79,6 +99,16 @@ const Index = () => {
         <div className={`${isMobile ? 'mt-10' : 'mt-8'}`}>
           <SearchBar onSearch={handleSearch} isLoading={isLoading} />
         </div>
+        
+        {backendError && (
+          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center">
+            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+            <div>
+              <p className="font-medium">Backend Connection Error</p>
+              <p className="text-sm mt-1">{backendError}</p>
+            </div>
+          </div>
+        )}
         
         <div className={`${isMobile ? 'my-10' : 'my-8'}`}>
           {isLoading ? (

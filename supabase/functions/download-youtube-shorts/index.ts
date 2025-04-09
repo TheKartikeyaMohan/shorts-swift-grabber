@@ -17,7 +17,8 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 const isValidYoutubeUrl = (url: string): boolean => {
   return (
     url.includes("youtube.com/shorts/") || 
-    url.includes("youtu.be/")
+    url.includes("youtu.be/") ||
+    url.includes("youtube.com/watch")
   );
 };
 
@@ -63,7 +64,7 @@ serve(async (req: Request) => {
     
     // Validate URL format
     if (!url || !isValidYoutubeUrl(url)) {
-      throw new Error("Invalid YouTube Shorts URL");
+      throw new Error("Invalid YouTube URL");
     }
 
     // Get client IP for logging
@@ -76,18 +77,20 @@ serve(async (req: Request) => {
       console.log(`${key}: ${value}`);
     }
 
-    // Call the RapidAPI YouTube downloader
+    // Call the NEW RapidAPI YouTube downloader
     console.log("Fetching video data from RapidAPI");
-    console.log("RapidAPI URL: https://youtube-video-download-v2.p.rapidapi.com/");
+    console.log("RapidAPI URL: https://youtube-video-and-shorts-downloader.p.rapidapi.com/download");
     
-    const apiResponse = await fetch("https://youtube-video-download-v2.p.rapidapi.com/", {
-      method: "POST",
+    // Prepare the correct endpoint and parameters
+    const downloadUrl = new URL("https://youtube-video-and-shorts-downloader.p.rapidapi.com/download");
+    downloadUrl.searchParams.append("id", url);
+
+    const apiResponse = await fetch(downloadUrl.toString(), {
+      method: "GET",
       headers: {
-        "content-type": "application/json",
-        "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "youtube-video-download-v2.p.rapidapi.com",
-      },
-      body: JSON.stringify({ videoUrl: url }),
+        "x-rapidapi-host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
+        "x-rapidapi-key": RAPIDAPI_KEY
+      }
     });
 
     console.log("API response status:", apiResponse.status);
@@ -102,18 +105,58 @@ serve(async (req: Request) => {
     console.log("API data received:", JSON.stringify(data).substring(0, 200) + "...");
 
     // Check if we have valid data
-    if (!data || !data.video || !data.video.url) {
+    if (!data || !data.status || data.status !== "ok" || !data.results) {
       console.error("Invalid API response format:", JSON.stringify(data));
       throw new Error("Download link not found in API response");
     }
 
+    // Extract the appropriate video format - prefer high quality MP4 if available
+    let downloadFormat = null;
+    
+    // First try to find 720P MP4 video
+    downloadFormat = data.results.find(result => 
+      result.mime === "video/mp4" && result.quality === "720P60"
+    );
+    
+    // If not found, try 480P
+    if (!downloadFormat) {
+      downloadFormat = data.results.find(result => 
+        result.mime === "video/mp4" && result.quality === "480P"
+      );
+    }
+    
+    // If still not found, try 360P
+    if (!downloadFormat) {
+      downloadFormat = data.results.find(result => 
+        result.mime === "video/mp4" && result.quality === "360P"
+      );
+    }
+    
+    // If no video format found, use audio format
+    if (!downloadFormat) {
+      downloadFormat = data.results.find(result => 
+        result.mime.includes("audio") && result.has_audio
+      );
+    }
+    
+    // If still no format found, just use the first result
+    if (!downloadFormat && data.results.length > 0) {
+      downloadFormat = data.results[0];
+    }
+    
+    if (!downloadFormat || !downloadFormat.url) {
+      throw new Error("No suitable download format found");
+    }
+
     // Video data to return
     const videoData = {
-      downloadUrl: data.video.url,
-      title: data.video.title || "YouTube Video",
-      thumbnail: data.video.thumbnail || "",
-      duration: data.video.duration || "",
-      author: data.video.author || ""
+      downloadUrl: downloadFormat.url,
+      title: data.title || "YouTube Video",
+      thumbnail: data.thumbnail || "",
+      duration: data.duration || "",
+      author: data.author || "",
+      quality: downloadFormat.quality || "",
+      format: downloadFormat.mime.split('/')[1] || ""
     };
 
     // Log successful download to Supabase

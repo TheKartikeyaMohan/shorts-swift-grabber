@@ -15,6 +15,8 @@ interface VideoInfo {
     label: string;
   }>;
   downloadUrl?: string;
+  quality?: string;
+  format?: string;
 }
 
 interface VideoResultProps {
@@ -23,11 +25,11 @@ interface VideoResultProps {
 }
 
 const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
-  const { title, thumbnail, duration, author, downloadUrl } = videoInfo;
+  const { title, thumbnail, duration, author, downloadUrl, quality, format } = videoInfo;
   const [downloading, setDownloading] = useState<boolean>(false);
 
   const formatOptions = {
-    mp4: { label: "Video", format: "mp4", quality: "720p" },
+    mp4: { label: "Video", format: "mp4", quality: quality || "720p" },
     mp3: { label: "Audio", format: "mp3", quality: "128kbps" }
   };
 
@@ -47,14 +49,14 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
 
       // Direct download if we already have the URL
       if (downloadUrl) {
-        startDownload(downloadUrl, title, selectedFormat);
+        startDownload(downloadUrl, title, format || selectedFormat);
         toast.success("Download started!");
         setDownloading(false);
         return;
       }
       
       // Otherwise call our new edge function
-      const { data, error } = await supabase.functions.invoke('download', {
+      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           videoUrl: storedUrl, 
           format: selectedFormat
@@ -71,7 +73,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       }
       
       // Start the download
-      startDownload(data.downloadUrl, title, selectedFormat);
+      startDownload(data.downloadUrl, title, data.format || selectedFormat);
       toast.success("Download started!");
       
     } catch (error) {
@@ -111,6 +113,11 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
           <ShieldCheck className="h-3 w-3 mr-1" />
           <span>Verified</span>
         </div>
+        {quality && (
+          <div className="absolute top-2 right-2 bg-blue-100/90 text-blue-800 px-2 py-0.5 text-xs rounded">
+            {quality}
+          </div>
+        )}
       </div>
       
       <div className="p-5 space-y-4">
@@ -121,7 +128,10 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 text-sm text-gray-700">
               <span>Format:</span>
-              <span className="font-medium text-black">{selectedFormat === 'mp3' ? 'Audio (MP3)' : 'Video (MP4)'}</span>
+              <span className="font-medium text-black">
+                {format ? (format === 'mp3' ? 'Audio (MP3)' : `Video (${format.toUpperCase()})`) : 
+                 (selectedFormat === 'mp3' ? 'Audio (MP3)' : 'Video (MP4)')}
+              </span>
             </div>
           </div>
           
@@ -141,7 +151,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
             ) : (
               <span className="flex items-center justify-center">
                 <Download className="mr-2 h-4 w-4" />
-                Download {selectedFormat === 'mp3' ? 'Audio' : 'Video'}
+                Download {format ? (format === 'mp3' ? 'Audio' : 'Video') : (selectedFormat === 'mp3' ? 'Audio' : 'Video')}
               </span>
             )}
           </Button>

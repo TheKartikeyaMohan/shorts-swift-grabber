@@ -25,9 +25,9 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
       return;
     }
     
-    // More flexible URL validation for YouTube Shorts
+    // More flexible URL validation for YouTube videos
     if (!isValidYouTubeUrl(url)) {
-      toast.error("Please enter a valid YouTube Shorts URL");
+      toast.error("Please enter a valid YouTube URL");
       return;
     }
     
@@ -39,8 +39,8 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
   };
 
   const isValidYouTubeUrl = (url: string) => {
-    // Updated regex to specifically check for YouTube Shorts
-    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/shorts\/|youtu\.be\/).+/i;
+    // Updated regex to check for YouTube URLs including regular videos and shorts
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(shorts\/|watch\?v=)|youtu\.be\/).+/i;
     return youtubeRegex.test(url.trim());
   };
 
@@ -63,7 +63,7 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
           <Input
             ref={inputRef}
             type="text"
-            placeholder="Paste YouTube Shorts URL here"
+            placeholder="Paste YouTube URL here"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             className="h-14 pl-6 pr-28 rounded-full border-0 shadow-none text-base focus-visible:ring-0 placeholder:text-gray-400"

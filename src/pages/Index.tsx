@@ -18,6 +18,8 @@ interface VideoInfo {
   duration?: string;
   author?: string;
   downloadUrl?: string;
+  quality?: string;
+  format?: string;
   formats?: Array<{
     quality: string;
     format: string;
@@ -64,6 +66,8 @@ const Index = () => {
         duration: data.duration || "",
         author: data.author || "",
         downloadUrl: data.downloadUrl,
+        quality: data.quality || "",
+        format: data.format || format,
         formats: [
           { label: "HD", quality: "720p", format: "mp4" },
           { label: "SD", quality: "360p", format: "mp4" },

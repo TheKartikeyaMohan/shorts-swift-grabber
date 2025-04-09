@@ -2,7 +2,9 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Check, ShieldCheck, Download } from "lucide-react";
+import { Check, ShieldCheck, Download, Info } from "lucide-react";
+import { downloadVideo } from "@/services/mockYoutubeService";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface VideoInfo {
   title: string;
@@ -18,9 +20,10 @@ interface VideoInfo {
 
 interface VideoResultProps {
   videoInfo: VideoInfo;
+  isUsingMockApi?: boolean;
 }
 
-const VideoResult = ({ videoInfo }: VideoResultProps) => {
+const VideoResult = ({ videoInfo, isUsingMockApi = false }: VideoResultProps) => {
   const { title, thumbnail, duration, author } = videoInfo;
   const [selectedFormat, setSelectedFormat] = useState<string>("720p");
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -46,59 +49,73 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
       
       toast.info("Preparing your download...");
       
-      const response = await fetch("/api/download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: storedUrl,
-          format,
-          quality,
-        }),
-      });
-      
-      if (!response.ok) {
-        let errorMessage = "Download failed";
-        try {
-          const errorData = await response.json();
-          console.error("Download error details:", errorData);
-          errorMessage = errorData.error || "Download failed";
-        } catch (e) {
-          console.error("Error parsing error response:", e);
+      if (isUsingMockApi) {
+        // Use mock download service
+        const data = await downloadVideo(storedUrl, format, quality);
+        
+        if (!data.downloadUrl) {
+          throw new Error("No download URL provided in demo mode");
         }
-        throw new Error(errorMessage);
+        
+        // For demo mode, open YouTube in a new tab since we can't actually download
+        window.open(data.downloadUrl, '_blank');
+        toast.success("Demo mode: Opened video in new tab");
+      } else {
+        // Regular backend download flow
+        const response = await fetch("/api/download", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: storedUrl,
+            format,
+            quality,
+          }),
+        });
+        
+        if (!response.ok) {
+          let errorMessage = "Download failed";
+          try {
+            const errorData = await response.json();
+            console.error("Download error details:", errorData);
+            errorMessage = errorData.error || "Download failed";
+          } catch (e) {
+            console.error("Error parsing error response:", e);
+          }
+          throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        
+        // Check if we have a valid download URL
+        if (!data.downloadUrl) {
+          throw new Error("No download URL provided");
+        }
+        
+        console.log("Download URL received:", data.downloadUrl);
+        
+        // Create a hidden link and click it to start the download
+        const link = document.createElement("a");
+        link.href = data.downloadUrl;
+        link.download = `${title || 'youtube_video'}.${format}`;
+        
+        // Important: When using the proxy, make sure the URL is correct
+        if (!link.href.startsWith('http')) {
+          const baseUrl = window.location.origin;
+          link.href = `${baseUrl}${data.downloadUrl}`;
+        }
+        
+        console.log("Final download link:", link.href);
+        
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success("Download started");
       }
-      
-      const data = await response.json();
-      
-      // Check if we have a valid download URL
-      if (!data.downloadUrl) {
-        throw new Error("No download URL provided");
-      }
-      
-      console.log("Download URL received:", data.downloadUrl);
-      
-      // Create a hidden link and click it to start the download
-      const link = document.createElement("a");
-      link.href = data.downloadUrl;
-      link.download = `${title || 'youtube_video'}.${format}`;
-      
-      // Important: When using the proxy, make sure the URL is correct
-      if (!link.href.startsWith('http')) {
-        const baseUrl = window.location.origin;
-        link.href = `${baseUrl}${data.downloadUrl}`;
-      }
-      
-      console.log("Final download link:", link.href);
-      
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success("Download started");
       
     } catch (error) {
       console.error("Download error:", error);
@@ -110,6 +127,14 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
 
   return (
     <div className="w-full max-w-xl mx-auto yt-card overflow-hidden bg-white">
+      {isUsingMockApi && (
+        <Alert className="rounded-none border-b border-amber-200 bg-amber-50 text-amber-800">
+          <Info className="h-4 w-4 mr-2" />
+          <AlertDescription className="text-xs">
+            Demo mode: Backend server is unavailable. Using sample data.
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="aspect-video relative overflow-hidden bg-black">
         <img 
           src={thumbnail} 
@@ -173,10 +198,17 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
             ) : (
               <span className="flex items-center justify-center">
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                {isUsingMockApi ? "Open in YouTube (Demo)" : "Download"}
               </span>
             )}
           </Button>
+          
+          {isUsingMockApi && (
+            <p className="text-xs text-center text-gray-500 mt-2">
+              Note: In demo mode, downloads will open the video on YouTube instead of downloading it.
+              Please start the backend server for full functionality.
+            </p>
+          )}
         </div>
       </div>
     </div>

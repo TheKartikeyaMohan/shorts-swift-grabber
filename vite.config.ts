@@ -14,6 +14,15 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
+        timeout: 5000,
+        onError: (err, req, res) => {
+          console.error(`Proxy error:`, err);
+          res.statusCode = 500;
+          res.end(JSON.stringify({ 
+            error: "Backend server connection failed",
+            details: err.message
+          }));
+        }
       }
     }
   },

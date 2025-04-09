@@ -10,11 +10,13 @@ import { Toaster } from "sonner";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ShieldCheck, IndianRupee, AlertCircle } from "lucide-react";
+import { fetchVideoInfo } from "@/services/mockYoutubeService";
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<any>(null);
   const [backendError, setBackendError] = useState<string | null>(null);
+  const [isUsingMockApi, setIsUsingMockApi] = useState(false);
   const isMobile = useIsMobile();
 
   const handleSearch = async (url: string) => {
@@ -25,11 +27,15 @@ const Index = () => {
     try {
       toast.info("Searching for video...");
       
+      let data;
+      
       // Check if backend is available
       try {
         const healthCheck = await fetch("/api/health", { 
           method: "GET",
-          headers: { "Content-Type": "application/json" }
+          headers: { "Content-Type": "application/json" },
+          // Add a timeout to fail faster if backend is not responding
+          signal: AbortSignal.timeout(3000)
         });
         
         if (!healthCheck.ok) {
@@ -37,33 +43,41 @@ const Index = () => {
         }
         
         console.log("Backend health check passed");
+        
+        // Make a request to our backend API
+        const response = await fetch("/api/video-info", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url }),
+        });
+        
+        if (!response.ok) {
+          let errorMessage = "Failed to fetch video info";
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch (e) {
+            console.error("Error parsing error response:", e);
+          }
+          throw new Error(errorMessage);
+        }
+        
+        data = await response.json();
+        setIsUsingMockApi(false);
+        
       } catch (error) {
         console.error("Backend health check failed:", error);
         setBackendError("Cannot connect to the download server. Please make sure it's running.");
-        throw new Error("Backend server is not available");
+        
+        // Fall back to mock data for demonstration
+        data = await fetchVideoInfo(url);
+        setIsUsingMockApi(true);
+        
+        console.log("Using mock data:", data);
       }
       
-      // Make a request to our backend API
-      const response = await fetch("/api/video-info", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
-      });
-      
-      if (!response.ok) {
-        let errorMessage = "Failed to fetch video info";
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error("Error parsing error response:", e);
-        }
-        throw new Error(errorMessage);
-      }
-      
-      const data = await response.json();
       setVideoInfo(data);
       toast.success("Video found!");
     } catch (error) {
@@ -106,6 +120,11 @@ const Index = () => {
             <div>
               <p className="font-medium">Backend Connection Error</p>
               <p className="text-sm mt-1">{backendError}</p>
+              {isUsingMockApi && (
+                <p className="text-sm mt-1 font-medium text-amber-600">
+                  Using demo mode with sample data
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -117,7 +136,7 @@ const Index = () => {
             <>
               <AdBanner position="middle" />
               <div className={`${isMobile ? 'mt-8' : 'mt-6'}`}>
-                <VideoResult videoInfo={videoInfo} />
+                <VideoResult videoInfo={videoInfo} isUsingMockApi={isUsingMockApi} />
               </div>
             </>
           ) : (

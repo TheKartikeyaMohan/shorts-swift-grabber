@@ -52,6 +52,8 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       // Direct download if we already have the URL
       if (downloadUrl) {
         try {
+          console.log("Attempting download with URL:", downloadUrl);
+          
           // Try fetching the download URL first to check if it's accessible
           const checkResponse = await fetch(downloadUrl, { method: 'HEAD' }).catch(() => null);
           
@@ -76,6 +78,12 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       setRetryCount(prev => prev + 1);
       
       // Call our edge function
+      console.log("Calling edge function with parameters:", { 
+        url: storedUrl, 
+        format: selectedFormat,
+        quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p')
+      });
+      
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           url: storedUrl, 
@@ -84,12 +92,15 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         }
       });
       
+      console.log("Edge function response:", data, error);
+      
       if (error) {
         console.error("Edge function error:", error);
         throw new Error(error.message || "Download failed");
       }
       
       if (!data || !data.downloadUrl) {
+        console.error("Invalid response structure:", data);
         throw new Error("No download URL provided");
       }
       

@@ -28,11 +28,13 @@ interface VideoInfo {
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
+  const [selectedFormat, setSelectedFormat] = useState<string>("mp4");
   const isMobile = useIsMobile();
 
-  const handleSearch = async (url: string) => {
+  const handleSearch = async (url: string, format: string) => {
     setIsLoading(true);
     setVideoInfo(null);
+    setSelectedFormat(format);
     
     try {
       toast.info("Searching for video...");
@@ -51,8 +53,9 @@ const Index = () => {
         throw new Error("No data returned from API");
       }
       
-      // Store the URL in localStorage for the download function
+      // Store the URL and format in localStorage for the download function
       localStorage.setItem("lastYoutubeUrl", url);
+      localStorage.setItem("lastFormat", format);
       
       // Prepare video info from the response
       const videoData: VideoInfo = {
@@ -111,7 +114,7 @@ const Index = () => {
             <>
               <AdBanner position="middle" />
               <div className={`${isMobile ? 'mt-8' : 'mt-6'}`}>
-                <VideoResult videoInfo={videoInfo} />
+                <VideoResult videoInfo={videoInfo} selectedFormat={selectedFormat} />
               </div>
             </>
           ) : (

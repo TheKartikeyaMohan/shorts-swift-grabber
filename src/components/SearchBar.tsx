@@ -4,14 +4,17 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Clipboard } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface SearchBarProps {
-  onSearch: (url: string) => void;
+  onSearch: (url: string, format: string) => void;
   isLoading: boolean;
 }
 
 const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
   const [url, setUrl] = useState("");
+  const [format, setFormat] = useState("mp4");
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -30,8 +33,9 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
     
     // Store the URL in localStorage for later use
     localStorage.setItem("lastYoutubeUrl", url);
+    localStorage.setItem("lastFormat", format);
     
-    onSearch(url);
+    onSearch(url, format);
   };
 
   const isValidYouTubeUrl = (url: string) => {
@@ -74,13 +78,32 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
             paste
           </Button>
         </div>
-        <Button 
-          type="submit" 
-          className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-base tracking-wide transition-colors"
-          disabled={isLoading}
-        >
-          {isLoading ? "Processing..." : "Download"}
-        </Button>
+        
+        <div className="flex gap-4 items-center">
+          <div className="flex-1">
+            <Label htmlFor="format-select" className="block text-sm font-medium text-gray-700 mb-1.5">
+              Select Format
+            </Label>
+            <Select value={format} onValueChange={setFormat} disabled={isLoading}>
+              <SelectTrigger id="format-select" className="h-12 rounded-lg bg-white">
+                <SelectValue placeholder="Select Format" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mp4">Video (MP4)</SelectItem>
+                <SelectItem value="mp3">Audio Only (MP3)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Button 
+              type="submit" 
+              className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-base tracking-wide transition-colors mt-7"
+              disabled={isLoading}
+            >
+              {isLoading ? "Processing..." : "Download"}
+            </Button>
+          </div>
+        </div>
       </form>
     </div>
   );

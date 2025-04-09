@@ -14,6 +14,7 @@ export type Database = {
           created_at: string
           download_url: string | null
           error_message: string | null
+          format: string | null
           id: string
           ip_address: string | null
           status: string
@@ -23,6 +24,7 @@ export type Database = {
           created_at?: string
           download_url?: string | null
           error_message?: string | null
+          format?: string | null
           id?: string
           ip_address?: string | null
           status: string
@@ -32,6 +34,7 @@ export type Database = {
           created_at?: string
           download_url?: string | null
           error_message?: string | null
+          format?: string | null
           id?: string
           ip_address?: string | null
           status?: string

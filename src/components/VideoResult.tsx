@@ -19,44 +19,46 @@ interface VideoInfo {
 
 interface VideoResultProps {
   videoInfo: VideoInfo;
+  selectedFormat: string;
 }
 
-const VideoResult = ({ videoInfo }: VideoResultProps) => {
+const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
   const { title, thumbnail, duration, author, downloadUrl } = videoInfo;
-  const [selectedFormat, setSelectedFormat] = useState<string>("720p");
-  const [downloading, setDownloading] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<boolean>(false);
 
-  // Use formats from backend or fallback to default options
-  const downloadOptions = videoInfo.formats || [
-    { label: "HD", quality: "720p", format: "mp4" },
-    { label: "SD", quality: "360p", format: "mp4" },
-    { label: "Audio", quality: "128kbps", format: "mp3" },
-  ];
+  const formatOptions = {
+    mp4: { label: "Video", format: "mp4", quality: "720p" },
+    mp3: { label: "Audio", format: "mp3", quality: "128kbps" }
+  };
 
-  const handleDownload = async (quality: string, format: string) => {
-    setDownloading(`${format}-${quality}`);
+  const handleDownload = async () => {
+    setDownloading(true);
     
     try {
       const storedUrl = localStorage.getItem("lastYoutubeUrl");
       
       if (!storedUrl) {
         toast.error("Missing video URL. Please search again.");
-        setDownloading(null);
+        setDownloading(false);
         return;
       }
       
-      toast.info("Starting download...");
+      toast.info(`Starting ${selectedFormat === "mp3" ? "audio" : "video"} download...`);
 
       // Direct download if we already have the URL
       if (downloadUrl) {
-        startDownload(downloadUrl, title, format);
+        startDownload(downloadUrl, title, selectedFormat);
         toast.success("Download started!");
+        setDownloading(false);
         return;
       }
       
-      // Otherwise call our edge function
-      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
-        body: { url: storedUrl, format, quality }
+      // Otherwise call our new edge function
+      const { data, error } = await supabase.functions.invoke('download', {
+        body: { 
+          videoUrl: storedUrl, 
+          format: selectedFormat
+        }
       });
       
       if (error) {
@@ -69,14 +71,14 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
       }
       
       // Start the download
-      startDownload(data.downloadUrl, title, format);
+      startDownload(data.downloadUrl, title, selectedFormat);
       toast.success("Download started!");
       
     } catch (error) {
       console.error("Download error:", error);
       toast.error(error instanceof Error ? error.message : "Download failed");
     } finally {
-      setDownloading(null);
+      setDownloading(false);
     }
   };
 
@@ -116,35 +118,17 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
         {author && <p className="text-xs text-gray-500">{author}</p>}
         
         <div className="space-y-4 pt-2">
-          <div className="flex gap-2">
-            {downloadOptions.map((option) => (
-              <Button
-                key={option.quality}
-                variant="outline"
-                className={`flex-1 h-10 rounded-full ${
-                  selectedFormat === option.quality 
-                    ? "border-red-500 bg-red-50 text-red-700" 
-                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
-                }`}
-                onClick={() => setSelectedFormat(option.quality)}
-              >
-                {selectedFormat === option.quality && (
-                  <Check className="mr-1 h-3 w-3" />
-                )}
-                {option.label}
-              </Button>
-            ))}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 text-sm text-gray-700">
+              <span>Format:</span>
+              <span className="font-medium text-black">{selectedFormat === 'mp3' ? 'Audio (MP3)' : 'Video (MP4)'}</span>
+            </div>
           </div>
           
           <Button
-            onClick={() => {
-              const option = downloadOptions.find(opt => opt.quality === selectedFormat);
-              if (option) {
-                handleDownload(option.quality, option.format);
-              }
-            }}
+            onClick={handleDownload}
             className="w-full bg-red-600 hover:bg-red-700 text-white h-11 font-medium text-sm rounded-full tracking-wide transition-colors"
-            disabled={!!downloading}
+            disabled={downloading}
           >
             {downloading ? (
               <span className="flex items-center justify-center">
@@ -157,7 +141,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
             ) : (
               <span className="flex items-center justify-center">
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                Download {selectedFormat === 'mp3' ? 'Audio' : 'Video'}
               </span>
             )}
           </Button>

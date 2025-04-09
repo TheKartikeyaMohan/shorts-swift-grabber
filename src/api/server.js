@@ -24,6 +24,19 @@ if (!fs.existsSync(downloadsDir)) {
   fs.mkdirSync(downloadsDir, { recursive: true });
 }
 
+// Helper function to sanitize YouTube URLs
+const sanitizeYouTubeUrl = (url) => {
+  // Basic sanitization to remove leading/trailing spaces
+  url = url.trim();
+  
+  // If URL doesn't have protocol, add it
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  
+  return url;
+};
+
 // API route to get video information
 app.post('/api/video-info', async (req, res) => {
   const { url } = req.body;
@@ -32,15 +45,22 @@ app.post('/api/video-info', async (req, res) => {
     return res.status(400).json({ error: 'URL is required' });
   }
   
+  const sanitizedUrl = sanitizeYouTubeUrl(url);
+  console.log(`Processing URL: ${sanitizedUrl}`);
+  
   try {
     const tempFileName = `info_${Date.now()}.json`;
     const tempFilePath = path.join(os.tmpdir(), tempFileName);
     
-    // Execute yt-dlp to get video info
-    exec(`yt-dlp --dump-json --no-playlist "${url}" > "${tempFilePath}"`, (error, stdout, stderr) => {
+    // Execute yt-dlp to get video info with increased verbosity
+    const ytdlpCommand = `yt-dlp --dump-json --no-playlist --no-check-certificate "${sanitizedUrl}" > "${tempFilePath}"`;
+    console.log(`Executing command: ${ytdlpCommand}`);
+    
+    exec(ytdlpCommand, (error, stdout, stderr) => {
       if (error) {
         console.error(`Error executing yt-dlp: ${error.message}`);
-        return res.status(500).json({ error: 'Failed to get video info' });
+        console.error(`stderr: ${stderr}`);
+        return res.status(500).json({ error: 'Failed to get video info', details: stderr });
       }
       
       // Read the info file
@@ -97,6 +117,9 @@ app.post('/api/download', async (req, res) => {
     return res.status(400).json({ error: 'URL and format are required' });
   }
   
+  const sanitizedUrl = sanitizeYouTubeUrl(url);
+  console.log(`Download request for URL: ${sanitizedUrl}, format: ${format}, quality: ${quality}`);
+  
   try {
     // Generate a unique filename
     const timestamp = Date.now();
@@ -107,14 +130,14 @@ app.post('/api/download', async (req, res) => {
     
     // Build download command based on format and quality
     if (format === 'mp3') {
-      command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist "${url}" -o "${outputPath}"`;
+      command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist --no-check-certificate "${sanitizedUrl}" -o "${outputPath}"`;
     } else {
-      // Video format
-      const formatString = quality === '720p' ? 'best[height<=720]' : 'best[height<=360]';
-      command = `yt-dlp -f ${formatString} --no-playlist --merge-output-format mp4 "${url}" -o "${outputPath}"`;
+      // Video format with more flexible format selection
+      const formatString = quality === '720p' ? 'bestvideo[height<=720]+bestaudio/best[height<=720]' : 'bestvideo[height<=360]+bestaudio/best[height<=360]';
+      command = `yt-dlp -f ${formatString} --no-playlist --no-check-certificate --merge-output-format mp4 "${sanitizedUrl}" -o "${outputPath}"`;
     }
     
-    console.log(`Executing command: ${command}`);
+    console.log(`Executing download command: ${command}`);
     
     // Execute download command
     exec(command, (error, stdout, stderr) => {
@@ -124,6 +147,7 @@ app.post('/api/download', async (req, res) => {
         return res.status(500).json({ error: 'Download failed', details: stderr });
       }
       
+      console.log(`Download stdout: ${stdout}`);
       console.log(`Download successful: ${outputPath}`);
       
       // Check if file exists

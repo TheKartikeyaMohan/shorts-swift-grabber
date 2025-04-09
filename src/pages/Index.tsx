@@ -33,18 +33,24 @@ const Index = () => {
       });
       
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to fetch video info");
+        let errorMessage = "Failed to fetch video info";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error("Error parsing error response:", e);
+        }
+        throw new Error(errorMessage);
       }
       
       const data = await response.json();
       setVideoInfo(data);
-      setIsLoading(false);
-      toast.success("Video found");
+      toast.success("Video found!");
     } catch (error) {
       console.error("Error fetching video:", error);
-      setIsLoading(false);
       toast.error(error instanceof Error ? error.message : "Error processing video");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -53,8 +59,8 @@ const Index = () => {
       <Toaster position="top-center" />
       <Header />
       
-      <main className={`flex-1 max-w-4xl mx-auto w-full px-4 pb-10 ${isMobile ? 'pt-4' : ''}`}>
-        <div className={`${isMobile ? 'py-8' : 'py-10'} text-center`}>
+      <main className={`flex-1 max-w-4xl mx-auto w-full px-4 pb-10 ${isMobile ? 'pt-6' : ''}`}>
+        <div className={`${isMobile ? 'py-10' : 'py-10'} text-center`}>
           <h1 className="text-2xl font-bold mb-3 text-slate-800">YouTube Shorts Downloader</h1>
           <p className="text-sm text-slate-500 px-2">
             Download any YouTube Shorts video in high quality - <span className="bg-gradient-to-r from-red-50 to-red-100 px-1.5 py-0.5 rounded-sm font-medium">100% Free</span>
@@ -91,7 +97,7 @@ const Index = () => {
                 <span className="text-sm font-medium text-slate-700">Secure & Trusted Service</span>
               </div>
               <p className="text-sm text-slate-500">
-                Paste a YouTube URL above and click Download
+                Paste a YouTube Shorts URL above and click Download
               </p>
               <p className="text-xs mt-4 text-slate-400">
                 No registration required · <span className="font-medium text-red-500">Free</span> · No watermarks

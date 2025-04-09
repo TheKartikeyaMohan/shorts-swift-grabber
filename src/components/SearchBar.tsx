@@ -22,8 +22,8 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
       return;
     }
     
-    // Basic URL validation
-    if (!url.includes("youtube.com") && !url.includes("youtu.be")) {
+    // More flexible URL validation for YouTube Shorts
+    if (!isValidYouTubeUrl(url)) {
       toast.error("Please enter a valid YouTube URL");
       return;
     }
@@ -32,6 +32,12 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
     localStorage.setItem("lastYoutubeUrl", url);
     
     onSearch(url);
+  };
+
+  const isValidYouTubeUrl = (url: string) => {
+    // More permissive regex that accepts various YouTube URL formats
+    const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.?be)\/.+/i;
+    return youtubeRegex.test(url.trim());
   };
 
   const handlePaste = async () => {

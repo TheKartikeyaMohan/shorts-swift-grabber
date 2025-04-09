@@ -1,12 +1,16 @@
 
 FROM node:18-slim
 
-# Install yt-dlp and required dependencies
+# Install yt-dlp and required dependencies with specific versions
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip ffmpeg curl && \
-    pip3 install yt-dlp && \
+    apt-get install -y python3 python3-pip ffmpeg curl wget && \
+    pip3 install --upgrade pip && \
+    pip3 install yt-dlp==2023.12.30 && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Test yt-dlp installation and print version
+RUN yt-dlp --version
 
 # Set working directory
 WORKDIR /app

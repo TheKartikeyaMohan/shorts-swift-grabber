@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Clipboard } from "lucide-react";
 
 interface SearchBarProps {
   onSearch: (url: string) => void;
@@ -45,28 +46,29 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
   return (
     <div className="w-full max-w-md mx-auto">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative">
+        <div className="relative google-card">
           <Input
             ref={inputRef}
             type="text"
             placeholder="Paste YouTube URL here"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="h-12 pl-4 pr-20 rounded-md border-muted/30 focus:border-muted/50 focus:ring-0"
+            className="h-12 pl-4 pr-20 rounded-lg border-transparent focus:border-blue-500 focus:ring-0 shadow-none"
             disabled={isLoading}
           />
-          <button
+          <Button
             type="button"
             onClick={handlePaste}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-xs uppercase tracking-wider font-medium text-muted-foreground"
+            className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center space-x-1 text-xs bg-transparent hover:bg-transparent text-muted-foreground hover:text-blue-500"
             disabled={isLoading}
           >
-            Paste
-          </button>
+            <Clipboard className="h-4 w-4" /> 
+            <span>Paste</span>
+          </Button>
         </div>
         <Button 
           type="submit" 
-          className="w-full h-12 bg-black hover:bg-black/90 text-white font-medium rounded-md text-sm uppercase tracking-wider"
+          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm tracking-wide transition-colors"
           disabled={isLoading}
         >
           {isLoading ? "Processing..." : "Download"}

@@ -57,15 +57,15 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col google-gradient">
       <Toaster position="top-center" />
       <Header toggleTheme={toggleTheme} isDarkMode={isDarkMode} />
       
       <main className="flex-1 max-w-xl mx-auto w-full px-4 pb-10">
         <div className="py-8 text-center">
-          <h1 className="text-2xl font-medium mb-1">YouTube Shorts Downloader</h1>
-          <p className="text-sm text-muted-foreground">
-            Save shorts and videos in high quality
+          <h1 className="text-2xl font-medium mb-1 text-slate-800">YouTube Shorts Downloader</h1>
+          <p className="text-sm text-slate-500">
+            Download any YouTube video in high quality
           </p>
         </div>
         
@@ -86,9 +86,9 @@ const Index = () => {
               </div>
             </>
           ) : (
-            <div className="text-center py-10">
-              <p className="text-sm text-muted-foreground">
-                Paste a YouTube URL and click Download
+            <div className="text-center py-10 google-card bg-white/60 backdrop-blur-sm mx-auto max-w-md p-8">
+              <p className="text-sm text-slate-500">
+                Paste a YouTube URL above and click Download
               </p>
             </div>
           )}

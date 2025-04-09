@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Check } from "lucide-react";
 
 interface VideoInfo {
   title: string;
@@ -40,7 +41,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto border border-muted/20 rounded-md overflow-hidden bg-background">
+    <div className="w-full max-w-md mx-auto google-card overflow-hidden bg-white">
       <div className="aspect-video relative overflow-hidden bg-black">
         <img 
           src={thumbnail} 
@@ -48,7 +49,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
           className="w-full h-full object-cover"
         />
         {duration && (
-          <div className="absolute bottom-2 right-2 bg-black/50 text-white px-1 py-0.5 text-xs rounded">
+          <div className="absolute bottom-2 right-2 bg-black/70 text-white px-1.5 py-0.5 text-xs rounded">
             {duration}
           </div>
         )}
@@ -63,10 +64,17 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
             {downloadOptions.map((option) => (
               <Button
                 key={option.quality}
-                variant={selectedFormat === option.quality ? "default" : "outline"}
-                className={`flex-1 h-10 ${selectedFormat === option.quality ? "bg-black hover:bg-black/90 text-white" : "border-muted/30 hover:bg-muted/10"}`}
+                variant="outline"
+                className={`flex-1 h-10 border rounded-full ${
+                  selectedFormat === option.quality 
+                    ? "border-blue-500 bg-blue-50 text-blue-700" 
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
                 onClick={() => setSelectedFormat(option.quality)}
               >
+                {selectedFormat === option.quality && (
+                  <Check className="mr-1 h-3 w-3" />
+                )}
                 {option.label}
               </Button>
             ))}
@@ -79,10 +87,10 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
                 handleDownload(option.quality, option.format);
               }
             }}
-            className="w-full bg-black hover:bg-black/90 text-white h-10 font-medium text-sm uppercase tracking-wider"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white h-11 font-medium text-sm rounded-lg tracking-wide transition-colors"
             disabled={!!downloading}
           >
-            {downloading ? "Starting..." : "Download"}
+            {downloading ? "Preparing..." : "Download"}
           </Button>
         </div>
       </div>

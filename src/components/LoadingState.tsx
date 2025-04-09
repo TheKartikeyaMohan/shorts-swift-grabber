@@ -7,16 +7,16 @@ const LoadingState = () => {
   
   useEffect(() => {
     const timer = setTimeout(() => {
-      setProgress(35);
-    }, 400);
+      setProgress(30);
+    }, 300);
     
     const timer2 = setTimeout(() => {
       setProgress(65);
-    }, 1100);
+    }, 1000);
     
     const timer3 = setTimeout(() => {
       setProgress(85);
-    }, 1800);
+    }, 1600);
     
     return () => {
       clearTimeout(timer);
@@ -26,10 +26,12 @@ const LoadingState = () => {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center py-12 space-y-6">
-      <div className="w-full max-w-md">
-        <Progress value={progress} className="h-1 bg-muted/20" />
-        <p className="text-sm text-muted-foreground mt-2 text-center">Processing your video...</p>
+    <div className="flex flex-col items-center justify-center py-12 space-y-5">
+      <div className="w-full max-w-md google-card p-6 bg-white">
+        <Progress value={progress} className="h-1 bg-slate-100" />
+        <p className="text-sm text-slate-500 mt-4 text-center">
+          Analyzing your video...
+        </p>
       </div>
     </div>
   );

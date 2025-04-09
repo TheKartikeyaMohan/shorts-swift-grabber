@@ -31,11 +31,11 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
+    --border: 210 20% 93%;
+    --input: 210 20% 93%;
     --ring: 0 72% 51%;
 
-    --radius: 0.75rem;
+    --radius: 0.5rem;
   }
 
   .dark {
@@ -91,5 +91,17 @@
   
   .youtube-icon {
     @apply absolute left-4 text-muted-foreground;
+  }
+
+  .google-gradient {
+    @apply bg-gradient-to-b from-white to-slate-50;
+  }
+  
+  .google-card {
+    @apply border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all duration-300;
+  }
+  
+  .google-button {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors;
   }
 }

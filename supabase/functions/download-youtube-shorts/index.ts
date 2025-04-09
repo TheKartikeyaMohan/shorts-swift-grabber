@@ -22,8 +22,11 @@ const isValidYoutubeUrl = (url: string): boolean => {
 };
 
 serve(async (req: Request) => {
+  console.log("Function invoked:", new Date().toISOString());
+  
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
+    console.log("Handling CORS preflight request");
     return new Response(null, {
       headers: corsHeaders,
       status: 204,
@@ -33,12 +36,15 @@ serve(async (req: Request) => {
   try {
     // Get RapidAPI key
     const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
+    console.log("RAPIDAPI_KEY availability:", RAPIDAPI_KEY ? "Present" : "Missing");
+    
     if (!RAPIDAPI_KEY) {
-      throw new Error("RAPIDAPI_KEY is not set");
+      throw new Error("RAPIDAPI_KEY is not set in environment variables");
     }
 
     // Parse request body
     const { url } = await req.json();
+    console.log("Processing URL:", url);
     
     // Validate URL format
     if (!url || !isValidYoutubeUrl(url)) {
@@ -47,9 +53,10 @@ serve(async (req: Request) => {
 
     // Get client IP for logging
     const clientIp = req.headers.get("x-forwarded-for") || "unknown";
+    console.log("Client IP:", clientIp);
 
     // Call the RapidAPI YouTube downloader
-    console.log("Fetching video data for:", url);
+    console.log("Fetching video data from RapidAPI");
     const apiResponse = await fetch("https://youtube-video-download-v2.p.rapidapi.com/", {
       method: "POST",
       headers: {
@@ -60,16 +67,20 @@ serve(async (req: Request) => {
       body: JSON.stringify({ videoUrl: url }),
     });
 
+    console.log("API response status:", apiResponse.status);
+
     if (!apiResponse.ok) {
-      const errorData = await apiResponse.json();
-      console.error("API error:", errorData);
-      throw new Error(`API error: ${apiResponse.status}`);
+      const errorText = await apiResponse.text();
+      console.error("API error response:", errorText);
+      throw new Error(`API error: ${apiResponse.status} - ${errorText}`);
     }
 
     const data = await apiResponse.json();
+    console.log("API data received:", JSON.stringify(data).substring(0, 200) + "...");
 
     // Check if we have valid data
     if (!data || !data.video || !data.video.url) {
+      console.error("Invalid API response format:", JSON.stringify(data));
       throw new Error("Download link not found in API response");
     }
 
@@ -83,12 +94,16 @@ serve(async (req: Request) => {
     };
 
     // Log successful download to Supabase
-    await supabase.from("downloads").insert({
+    const { error: dbError } = await supabase.from("downloads").insert({
       video_url: url,
       download_url: videoData.downloadUrl,
       status: "success",
       ip_address: clientIp
     });
+
+    if (dbError) {
+      console.error("Error logging to database:", dbError);
+    }
 
     console.log("Download successful:", videoData.title);
     
@@ -109,12 +124,16 @@ serve(async (req: Request) => {
       const { url } = await req.json();
       if (url) {
         // Log error to Supabase
-        await supabase.from("downloads").insert({
+        const { error: dbError } = await supabase.from("downloads").insert({
           video_url: url,
           status: "error",
           error_message: error.message,
           ip_address: req.headers.get("x-forwarded-for") || "unknown"
         });
+        
+        if (dbError) {
+          console.error("Error logging to database:", dbError);
+        }
       }
     } catch (logError) {
       console.error("Error logging to Supabase:", logError);

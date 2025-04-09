@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
@@ -18,6 +17,7 @@ interface VideoInfo {
   duration?: string;
   author?: string;
   downloadUrl?: string;
+  directUrl?: string;
   quality?: string;
   format?: string;
   isAudio?: boolean;
@@ -107,7 +107,7 @@ const Index = () => {
         setVideoInfo(fallbackInfo);
         toast.error("Using fallback mode due to server error. Download may not work.");
       }
-      
+    } finally {
       setIsLoading(false);
     }
   };
@@ -170,8 +170,6 @@ const Index = () => {
     } catch (error) {
       console.error("Express server error:", error);
       throw error;
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -214,6 +212,7 @@ const Index = () => {
             duration: data.duration || "",
             author: data.author || "",
             downloadUrl: data.downloadUrl,
+            directUrl: data.directUrl || data.downloadUrl,
             quality: data.quality || quality || "",
             format: data.format || format,
             isAudio: data.isAudio || format === "mp3",
@@ -246,8 +245,6 @@ const Index = () => {
     } catch (error) {
       console.error("Edge function final error:", error);
       throw error;
-    } finally {
-      setIsLoading(false);
     }
   };
 

@@ -152,7 +152,7 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
     }
     
     const data = await response.json();
-    console.log("RapidAPI response:", JSON.stringify(data).substring(0, 200) + "...");
+    console.log("RapidAPI response received, checking for formats...");
     
     if (!data || !data.formats) {
       console.error("Invalid response format from RapidAPI");
@@ -167,7 +167,7 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
     if (format === "mp4") {
       // Find all MP4 formats
       const mp4Formats = data.formats.filter((f: any) => 
-        f.ext === "mp4" && f.url && f.filesize && f.resolution
+        f.ext === "mp4" && f.url && f.resolution
       );
       
       // Sort by resolution (higher first)
@@ -206,22 +206,26 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
         downloadUrl = selectedFormat.url;
         selectedResolution = selectedFormat.resolution;
         
-        console.log(`Selected video format: ${selectedResolution}, URL: ${downloadUrl?.substring(0, 50)}...`);
+        console.log(`Selected video format: ${selectedResolution}, URL found`);
       }
     } 
     // For MP3 audio format
     else if (format === "mp3") {
       // Find audio formats
       const audioFormats = data.formats.filter((f: any) => 
-        (f.ext === "mp3" || f.ext === "m4a") && f.url && f.filesize
+        (f.ext === "mp3" || f.ext === "m4a") && f.url
       );
       
       if (audioFormats.length > 0) {
-        // Sort by filesize (higher quality first)
-        audioFormats.sort((a: any, b: any) => b.filesize - a.filesize);
+        // Sort by filesize if available (higher quality first)
+        if (audioFormats[0].filesize) {
+          audioFormats.sort((a: any, b: any) => 
+            (b.filesize || 0) - (a.filesize || 0)
+          );
+        }
         downloadUrl = audioFormats[0].url;
         selectedResolution = "audio";
-        console.log(`Selected audio format, URL: ${downloadUrl?.substring(0, 50)}...`);
+        console.log(`Selected audio format, URL found`);
       }
     }
     
@@ -274,7 +278,7 @@ async function getY2MateDownloadUrl(url: string, format: string): Promise<{url: 
     }
     
     const infoData = await infoResponse.json();
-    console.log("Y2Mate info response:", JSON.stringify(infoData).substring(0, 200) + "...");
+    console.log("Y2Mate info response received");
     
     if (!infoData || !infoData.vid || !infoData.links) {
       console.log("Y2Mate API returned invalid data");
@@ -351,7 +355,7 @@ async function getY2MateDownloadUrl(url: string, format: string): Promise<{url: 
     }
     
     const convertData = await convertResponse.json();
-    console.log("Y2Mate convert response:", JSON.stringify(convertData).substring(0, 200) + "...");
+    console.log("Y2Mate convert response received");
     
     if (convertData && convertData.dlink) {
       mediaUrl = convertData.dlink;

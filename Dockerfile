@@ -29,8 +29,12 @@ RUN mkdir -p src/api/public/downloads && \
 # Copy source code
 COPY src/api ./src/api
 
+# Update yt-dlp periodically (every 30 days)
+RUN echo '#!/bin/sh\nwhile true; do\n  echo "Updating yt-dlp..."\n  pip3 install -U yt-dlp\n  sleep 2592000\ndone' > /update-ytdlp.sh && \
+    chmod +x /update-ytdlp.sh
+
 # Expose port
 EXPOSE 3001
 
-# Start the server
-CMD ["node", "src/api/server.js"]
+# Start the server and the update script
+CMD sh -c "/update-ytdlp.sh & node src/api/server.js"

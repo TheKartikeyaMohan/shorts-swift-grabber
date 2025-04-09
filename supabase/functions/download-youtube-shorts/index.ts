@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -22,16 +21,74 @@ const isValidYoutubeUrl = (url: string): boolean => {
   );
 };
 
+// Helper function to determine if a format is audio only
+function isAudioFormat(mimeType: string): boolean {
+  return mimeType.startsWith('audio/');
+}
+
+// Helper function to extract resolution from quality string
+function getResolutionValue(quality: string): number {
+  if (quality.includes('1080')) return 1080;
+  if (quality.includes('720')) return 720;
+  if (quality.includes('480')) return 480;
+  if (quality.includes('360')) return 360;
+  if (quality.includes('240')) return 240;
+  if (quality.includes('144')) return 144;
+  return 0;
+}
+
+// Helper function to select the best format based on user preference
+function selectBestFormat(results: any[], requestFormat: string): any {
+  if (!results || results.length === 0) {
+    return null;
+  }
+
+  if (requestFormat === "mp3") {
+    // Looking for best audio quality
+    const audioFormats = results.filter(result => isAudioFormat(result.mime));
+    if (audioFormats.length === 0) return results[0];
+    
+    // Prefer MP3 if available, otherwise take any audio format
+    const mp3Format = audioFormats.find(format => format.mime.includes('mp3'));
+    return mp3Format || audioFormats[0];
+  } else {
+    // Looking for video with preferred resolution for MP4
+    // First filter by mime type to get the right container format
+    const videoFormats = results.filter(result => 
+      result.mime.includes('mp4') && !isAudioFormat(result.mime)
+    );
+    
+    if (videoFormats.length === 0) {
+      // Fallback to any format if no MP4 available
+      return results.find(result => !isAudioFormat(result.mime)) || results[0];
+    }
+
+    // Sort by resolution, prefer: 720p > 480p > 360p
+    const sortedFormats = videoFormats.sort((a, b) => {
+      const resA = getResolutionValue(a.quality);
+      const resB = getResolutionValue(b.quality);
+      
+      // Prefer exactly 720p
+      if (resA === 720 && resB !== 720) return -1;
+      if (resB === 720 && resA !== 720) return 1;
+      
+      // Otherwise, get as close to 720p as possible without going over
+      if (resA <= 720 && resB > 720) return -1;
+      if (resB <= 720 && resA > 720) return 1;
+      
+      // Both are either under or over 720p, choose the higher one
+      return resB - resA;
+    });
+
+    return sortedFormats[0];
+  }
+}
+
 serve(async (req: Request) => {
   console.log("Function invoked:", new Date().toISOString());
-  console.log("Checking environment variables:");
-  console.log("SUPABASE_URL:", Deno.env.get("SUPABASE_URL") ? "Set" : "Not set");
-  console.log("SUPABASE_ANON_KEY:", Deno.env.get("SUPABASE_ANON_KEY") ? "Set" : "Not set");
-  console.log("RAPIDAPI_KEY:", Deno.env.get("RAPIDAPI_KEY") ? "Set" : "Not set");
   
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
-    console.log("Handling CORS preflight request");
     return new Response(null, {
       headers: corsHeaders,
       status: 204,
@@ -41,7 +98,6 @@ serve(async (req: Request) => {
   try {
     // Get RapidAPI key
     const RAPIDAPI_KEY = Deno.env.get("RAPIDAPI_KEY");
-    console.log("RAPIDAPI_KEY availability:", RAPIDAPI_KEY ? "Present" : "Missing");
     
     if (!RAPIDAPI_KEY) {
       throw new Error("RAPIDAPI_KEY is not set in environment variables");
@@ -49,10 +105,8 @@ serve(async (req: Request) => {
 
     // Parse request body
     const reqBody = await req.json();
-    console.log("Request body:", JSON.stringify(reqBody));
-    
-    let url = reqBody.url;
-    console.log("Processing URL:", url);
+    const url = reqBody.url;
+    const requestedFormat = reqBody.format || "mp4";
     
     // Validate URL format
     if (!url || !isValidYoutubeUrl(url)) {
@@ -61,21 +115,13 @@ serve(async (req: Request) => {
 
     // Get client IP for logging
     const clientIp = req.headers.get("x-forwarded-for") || "unknown";
-    console.log("Client IP:", clientIp);
 
-    // Log request headers for debugging
-    console.log("Request headers:");
-    for (const [key, value] of req.headers.entries()) {
-      console.log(`${key}: ${value}`);
-    }
-
-    // Call the RapidAPI YouTube downloader with the new endpoint
-    console.log("Fetching video data from RapidAPI");
+    // Call the RapidAPI YouTube downloader
+    console.log(`Fetching video data from RapidAPI for format: ${requestedFormat}`);
     
-    // New API endpoint: youtube-video-and-shorts-downloader.p.rapidapi.com
+    // API endpoint for YouTube video and shorts downloader
     const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/download";
-    console.log("RapidAPI URL:", apiUrl);
-
+    
     // Construct proper query parameters
     const downloadUrl = new URL(apiUrl);
     downloadUrl.searchParams.append("id", url);
@@ -98,61 +144,21 @@ serve(async (req: Request) => {
     }
 
     const data = await apiResponse.json();
-    console.log("API data received:", JSON.stringify(data).substring(0, 500) + "...");
 
     // Check if we have valid data in the expected format
-    if (!data || !data.status || data.status !== "ok" || !data.results) {
+    if (!data || !data.status || data.status !== "ok" || !data.results || !data.results.length) {
       console.error("Invalid API response format:", JSON.stringify(data));
       throw new Error("Download link not found in API response");
     }
 
-    // Extract the appropriate video format based on user's preference
-    const format = reqBody.format || "mp4";
-    let downloadFormat = null;
-    
-    if (format === "mp3") {
-      // Find audio format
-      downloadFormat = data.results.find(result => 
-        result.mime.includes("audio") && result.has_audio
-      );
-    } else {
-      // Try to find video with requested quality - prefer 720P for mp4
-      downloadFormat = data.results.find(result => 
-        result.mime === "video/mp4" && result.quality === "720P60"
-      );
-      
-      // If not found, try 480P
-      if (!downloadFormat) {
-        downloadFormat = data.results.find(result => 
-          result.mime === "video/mp4" && result.quality === "480P"
-        );
-      }
-      
-      // If still not found, try 360P
-      if (!downloadFormat) {
-        downloadFormat = data.results.find(result => 
-          result.mime === "video/mp4" && result.quality === "360P"
-        );
-      }
-      
-      // If no video format found, use any mp4
-      if (!downloadFormat) {
-        downloadFormat = data.results.find(result => 
-          result.mime === "video/mp4"
-        );
-      }
-    }
-    
-    // If still no format found, just use the first result
-    if (!downloadFormat && data.results.length > 0) {
-      downloadFormat = data.results[0];
-    }
+    // Select the best format based on user preference
+    const downloadFormat = selectBestFormat(data.results, requestedFormat);
     
     if (!downloadFormat || !downloadFormat.url) {
       throw new Error("No suitable download format found");
     }
 
-    // Video data to return
+    // Prepare video data to return
     const videoData = {
       downloadUrl: downloadFormat.url,
       title: data.title || "YouTube Video",
@@ -160,7 +166,8 @@ serve(async (req: Request) => {
       duration: data.duration || "",
       author: data.author || "",
       quality: downloadFormat.quality || "",
-      format: downloadFormat.mime.split('/')[1] || ""
+      format: downloadFormat.mime.split('/')[1] || "",
+      isAudio: isAudioFormat(downloadFormat.mime)
     };
 
     // Log successful download to Supabase
@@ -168,7 +175,7 @@ serve(async (req: Request) => {
       video_url: url,
       download_url: videoData.downloadUrl,
       status: "success",
-      format: format,
+      format: requestedFormat,
       ip_address: clientIp
     });
 
@@ -192,7 +199,7 @@ serve(async (req: Request) => {
     
     // Try to log error to Supabase
     try {
-      const reqJson = await req.json();
+      const reqJson = await req.json().catch(() => ({}));
       const url = reqJson.url;
       
       if (url) {
@@ -201,7 +208,8 @@ serve(async (req: Request) => {
           video_url: url,
           status: "error",
           error_message: error.message,
-          ip_address: req.headers.get("x-forwarded-for") || "unknown"
+          ip_address: req.headers.get("x-forwarded-for") || "unknown",
+          format: reqJson.format || "unknown"
         });
         
         if (dbError) {

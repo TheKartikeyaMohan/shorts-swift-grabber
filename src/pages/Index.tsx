@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
 import VideoResult from "@/components/VideoResult";
@@ -20,6 +20,7 @@ interface VideoInfo {
   downloadUrl?: string;
   quality?: string;
   format?: string;
+  isAudio?: boolean;
   formats?: Array<{
     quality: string;
     format: string;
@@ -27,21 +28,125 @@ interface VideoInfo {
   }>;
 }
 
+// Configuration
+const API_SERVER_URL = "http://localhost:3001"; // Replace with your actual server URL when deployed
+
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<string>("mp4");
+  const [selectedQuality, setSelectedQuality] = useState<string>("720p");
+  const [isExpressServerAvailable, setIsExpressServerAvailable] = useState(false);
   const isMobile = useIsMobile();
 
-  const handleSearch = async (url: string, format: string) => {
+  // Check if Express server is available on component mount
+  useEffect(() => {
+    const checkExpressServer = async () => {
+      try {
+        const response = await fetch(`${API_SERVER_URL}/api/health`, { 
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          // Add timeout to avoid long wait if server is down
+          signal: AbortSignal.timeout(5000)
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          console.log("Express server status:", data);
+          setIsExpressServerAvailable(true);
+        }
+      } catch (error) {
+        console.log("Express server not available, will use Edge Function instead");
+        setIsExpressServerAvailable(false);
+      }
+    };
+    
+    checkExpressServer();
+  }, []);
+
+  const handleSearch = async (url: string, format: string, quality?: string) => {
     setIsLoading(true);
     setVideoInfo(null);
     setSelectedFormat(format);
+    if (quality) setSelectedQuality(quality);
     
     try {
-      toast.info("Searching for video...");
+      toast.info("Processing your download request...");
       
-      // Call our Supabase Edge Function with the correct format
+      if (isExpressServerAvailable) {
+        // Use Express server with yt-dlp if available
+        await handleExpressDownload(url, format, quality);
+      } else {
+        // Fallback to Supabase Edge Function
+        await handleEdgeFunctionDownload(url, format);
+      }
+    } catch (error) {
+      console.error("Error processing download:", error);
+      toast.error(error instanceof Error ? error.message : "Error processing video");
+      setIsLoading(false);
+    }
+  };
+
+  const handleExpressDownload = async (url: string, format: string, quality?: string) => {
+    try {
+      // First get video info
+      const infoResponse = await fetch(`${API_SERVER_URL}/api/video-info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url })
+      });
+      
+      if (!infoResponse.ok) {
+        const errorData = await infoResponse.json();
+        throw new Error(errorData.error || "Failed to fetch video info");
+      }
+      
+      const infoData = await infoResponse.json();
+      
+      // Now request the download with the specified format/quality
+      const downloadResponse = await fetch(`${API_SERVER_URL}/api/download`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          url,
+          format,
+          quality: quality || (format === 'mp4' ? '720p' : undefined)
+        })
+      });
+      
+      if (!downloadResponse.ok) {
+        const errorData = await downloadResponse.json();
+        throw new Error(errorData.error || "Failed to download video");
+      }
+      
+      const downloadData = await downloadResponse.json();
+      
+      // Combine info and download data
+      const videoData: VideoInfo = {
+        title: infoData.title || "YouTube Video",
+        thumbnail: infoData.thumbnail || "",
+        duration: infoData.duration || "",
+        author: infoData.author || "",
+        downloadUrl: `${API_SERVER_URL}${downloadData.downloadUrl}`,
+        quality: downloadData.quality || quality || "",
+        format: downloadData.format || format,
+        isAudio: format === "mp3",
+        formats: infoData.formats || []
+      };
+      
+      setVideoInfo(videoData);
+      toast.success("Video ready for download!");
+    } catch (error) {
+      console.error("Express server error:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleEdgeFunctionDownload = async (url: string, format: string) => {
+    try {
+      // Call our Supabase Edge Function
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           url: url,
@@ -71,6 +176,7 @@ const Index = () => {
         downloadUrl: data.downloadUrl,
         quality: data.quality || "",
         format: data.format || format,
+        isAudio: data.isAudio || format === "mp3",
         formats: [
           { label: "HD", quality: "720p", format: "mp4" },
           { label: "SD", quality: "360p", format: "mp4" },
@@ -81,8 +187,8 @@ const Index = () => {
       setVideoInfo(videoData);
       toast.success("Video found!");
     } catch (error) {
-      console.error("Error fetching video:", error);
-      toast.error(error instanceof Error ? error.message : "Error processing video");
+      console.error("Edge function error:", error);
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +212,12 @@ const Index = () => {
             <IndianRupee className="h-3 w-3 text-orange-500 mr-1" />
             <span className="text-xs text-slate-600">Made in India</span>
           </div>
+          
+          {isExpressServerAvailable && (
+            <div className="mt-2 text-xs inline-flex items-center px-2 py-1 bg-green-50 text-green-700 rounded">
+              <span className="mr-1">●</span> Using high-speed yt-dlp server
+            </div>
+          )}
         </div>
         
         <AdBanner position="top" />
@@ -135,6 +247,9 @@ const Index = () => {
               </p>
               <p className="text-xs mt-4 text-slate-400">
                 No registration required · <span className="font-medium text-red-500">Free</span> · No watermarks
+              </p>
+              <p className="text-xs mt-2 text-slate-400">
+                Works with all YouTube Shorts and regular videos
               </p>
             </div>
           )}

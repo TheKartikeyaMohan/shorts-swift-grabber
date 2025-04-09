@@ -1,5 +1,5 @@
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,14 +7,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 
 interface SearchBarProps {
-  onSearch: (url: string, format: string) => void;
+  onSearch: (url: string, format: string, quality?: string) => void;
   isLoading: boolean;
 }
 
 const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
   const [url, setUrl] = useState("");
   const [format, setFormat] = useState("mp4");
+  const [quality, setQuality] = useState("720p");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Try to load last used values from localStorage
+  useEffect(() => {
+    const lastUrl = localStorage.getItem("lastYoutubeUrl");
+    const lastFormat = localStorage.getItem("lastFormat");
+    const lastQuality = localStorage.getItem("lastQuality");
+    
+    if (lastUrl) setUrl(lastUrl);
+    if (lastFormat) setFormat(lastFormat);
+    if (lastQuality) setQuality(lastQuality);
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,11 +45,13 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
     // Standardize URL format before sending
     const standardizedUrl = standardizeYouTubeUrl(url.trim());
     
-    // Store the URL in localStorage for later use
+    // Store user preferences in localStorage
     localStorage.setItem("lastYoutubeUrl", standardizedUrl);
     localStorage.setItem("lastFormat", format);
+    localStorage.setItem("lastQuality", quality);
     
-    onSearch(standardizedUrl, format);
+    // Send both format and quality settings
+    onSearch(standardizedUrl, format, format === "mp4" ? quality : undefined);
   };
 
   // Improved validation for YouTube URLs
@@ -95,9 +109,21 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
         <div className="flex gap-4 items-center">
           <div className="flex-1">
             <Label htmlFor="format-select" className="block text-sm font-medium text-gray-700 mb-1.5">
-              Select Format
+              Format
             </Label>
-            <Select value={format} onValueChange={setFormat} disabled={isLoading}>
+            <Select 
+              value={format} 
+              onValueChange={(value) => {
+                setFormat(value);
+                // Reset quality to default when switching formats
+                if (value === "mp3") {
+                  setQuality("high");
+                } else {
+                  setQuality("720p");
+                }
+              }} 
+              disabled={isLoading}
+            >
               <SelectTrigger id="format-select" className="h-12 rounded-lg bg-white">
                 <SelectValue placeholder="Select Format" />
               </SelectTrigger>
@@ -107,7 +133,26 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex-1">
+          
+          {format === "mp4" && (
+            <div className="flex-1">
+              <Label htmlFor="quality-select" className="block text-sm font-medium text-gray-700 mb-1.5">
+                Quality
+              </Label>
+              <Select value={quality} onValueChange={setQuality} disabled={isLoading}>
+                <SelectTrigger id="quality-select" className="h-12 rounded-lg bg-white">
+                  <SelectValue placeholder="Select Quality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="720p">HD (720p)</SelectItem>
+                  <SelectItem value="480p">SD (480p)</SelectItem>
+                  <SelectItem value="360p">Low (360p)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          
+          <div className={format === "mp4" ? "flex-1" : "flex-2"}>
             <Button 
               type="submit" 
               className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-base tracking-wide transition-colors mt-7"

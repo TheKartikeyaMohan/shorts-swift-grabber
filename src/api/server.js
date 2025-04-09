@@ -9,6 +9,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const os = require('os');
 const bodyParser = require('body-parser');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -39,6 +40,43 @@ const sanitizeYouTubeUrl = (url) => {
   return url;
 };
 
+// Helper function to sanitize filenames
+const sanitizeFilename = (name) => {
+  return name
+    .replace(/[^\w\s.-]/g, '') // Remove characters that aren't word chars, spaces, dots, or hyphens
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/__+/g, '_') // Replace multiple consecutive underscores with a single one
+    .substring(0, 100); // Limit length
+};
+
+// Helper function to log download attempts to Supabase (if possible)
+const logToSupabase = async (data) => {
+  try {
+    const { SUPABASE_URL, SUPABASE_ANON_KEY } = process.env;
+    
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.log("Supabase credentials not found, skipping log");
+      return;
+    }
+    
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/downloads`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify(data)
+    });
+    
+    if (!response.ok) {
+      console.error("Failed to log to Supabase:", await response.text());
+    }
+  } catch (error) {
+    console.error("Error logging to Supabase:", error.message);
+  }
+};
+
 // API route to get video information
 app.post('/api/video-info', async (req, res) => {
   const { url } = req.body;
@@ -54,7 +92,7 @@ app.post('/api/video-info', async (req, res) => {
     const tempFileName = `info_${Date.now()}.json`;
     const tempFilePath = path.join(os.tmpdir(), tempFileName);
     
-    // Execute yt-dlp to get video info with increased verbosity
+    // Execute yt-dlp to get video info
     const ytdlpCommand = `yt-dlp --dump-json --no-playlist --no-check-certificate "${sanitizedUrl}" > "${tempFilePath}"`;
     console.log(`Executing command: ${ytdlpCommand}`);
     
@@ -62,6 +100,15 @@ app.post('/api/video-info', async (req, res) => {
       if (error) {
         console.error(`Error executing yt-dlp: ${error.message}`);
         console.error(`stderr: ${stderr}`);
+        
+        // Log error to Supabase
+        logToSupabase({
+          video_url: sanitizedUrl,
+          status: 'error',
+          error_message: `Info fetch failed: ${error.message}`,
+          ip_address: req.ip
+        });
+        
         return res.status(500).json({ error: 'Failed to get video info', details: stderr });
       }
       
@@ -90,6 +137,13 @@ app.post('/api/video-info', async (req, res) => {
             { label: "SD", quality: "360p", format: "mp4" },
             { label: "Audio", quality: "128kbps", format: "mp3" }
           ];
+          
+          // Log successful info fetch to Supabase
+          logToSupabase({
+            video_url: sanitizedUrl,
+            status: 'info_success',
+            ip_address: req.ip
+          });
           
           // Send response
           res.json({
@@ -123,9 +177,10 @@ app.post('/api/download', async (req, res) => {
   console.log(`Download request for URL: ${sanitizedUrl}, format: ${format}, quality: ${quality}`);
   
   try {
-    // Generate a unique filename
+    // Generate a unique filename with UUID to prevent collisions
     const timestamp = Date.now();
-    const filename = `video_${timestamp}.${format}`;
+    const uniqueId = uuidv4().substring(0, 8);
+    const filename = `video_${timestamp}_${uniqueId}.${format}`;
     const outputPath = path.join(downloadsDir, filename);
     
     console.log(`Will save to: ${outputPath}`);
@@ -134,11 +189,21 @@ app.post('/api/download', async (req, res) => {
     
     // Build download command based on format and quality
     if (format === 'mp3') {
+      // Audio download - get best audio quality
       command = `yt-dlp -x --audio-format mp3 --audio-quality 0 --no-playlist --no-check-certificate "${sanitizedUrl}" -o "${outputPath}"`;
     } else {
-      // Video format with more flexible format selection
-      const formatString = quality === '720p' ? 'bestvideo[height<=720]+bestaudio/best[height<=720]' : 'bestvideo[height<=360]+bestaudio/best[height<=360]';
-      command = `yt-dlp -f ${formatString} --no-playlist --no-check-certificate --merge-output-format mp4 "${sanitizedUrl}" -o "${outputPath}"`;
+      // Video format with specific resolution preference
+      let formatString;
+      
+      if (quality === '720p') {
+        formatString = 'bestvideo[height<=720]+bestaudio/best[height<=720]';
+      } else if (quality === '480p') {
+        formatString = 'bestvideo[height<=480]+bestaudio/best[height<=480]';
+      } else { // Default to 360p
+        formatString = 'bestvideo[height<=360]+bestaudio/best[height<=360]';
+      }
+      
+      command = `yt-dlp -f "${formatString}" --no-playlist --no-check-certificate --merge-output-format mp4 "${sanitizedUrl}" -o "${outputPath}"`;
     }
     
     console.log(`Executing download command: ${command}`);
@@ -148,6 +213,16 @@ app.post('/api/download', async (req, res) => {
       if (error) {
         console.error(`Error downloading: ${error.message}`);
         console.error(`stderr: ${stderr}`);
+        
+        // Log error to Supabase
+        logToSupabase({
+          video_url: sanitizedUrl,
+          status: 'error',
+          format: format,
+          error_message: `Download failed: ${error.message}`,
+          ip_address: req.ip
+        });
+        
         return res.status(500).json({ error: 'Download failed', details: stderr });
       }
       
@@ -167,10 +242,27 @@ app.post('/api/download', async (req, res) => {
         return res.status(500).json({ error: 'Downloaded file is empty' });
       }
       
-      // Return the download URL
+      // Generate the download URL - make sure this matches your frontend expected format
       const downloadUrl = `/api/downloads/${filename}`;
       console.log(`Download URL provided: ${downloadUrl}`);
-      res.json({ downloadUrl });
+      
+      // Log success to Supabase
+      logToSupabase({
+        video_url: sanitizedUrl,
+        download_url: downloadUrl,
+        status: 'success',
+        format: format,
+        ip_address: req.ip
+      });
+      
+      // Return video data in the same format as the Supabase Edge Function
+      res.json({
+        downloadUrl,
+        title: path.basename(filename, path.extname(filename)),
+        format,
+        quality,
+        isAudio: format === 'mp3'
+      });
       
       // Set up cleanup task for downloaded file (after 1 hour)
       setTimeout(() => {
@@ -189,7 +281,7 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
-// New route to serve downloads directly
+// Route to serve downloads directly
 app.get('/api/downloads/:filename', (req, res) => {
   const { filename } = req.params;
   const filePath = path.join(downloadsDir, filename);
@@ -217,7 +309,8 @@ app.get('/api/health', (req, res) => {
     status: 'ok', 
     message: 'API server is running',
     downloadsDir: downloadsDir,
-    dirExists: fs.existsSync(downloadsDir)
+    dirExists: fs.existsSync(downloadsDir),
+    ytdlpVersion: process.env.YTDLP_VERSION || 'unknown'
   });
 });
 
@@ -225,4 +318,15 @@ app.get('/api/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Downloads directory: ${downloadsDir}`);
+  
+  // Check if yt-dlp is available
+  exec('yt-dlp --version', (error, stdout, stderr) => {
+    if (error) {
+      console.error('⚠️ yt-dlp is not available, downloads will fail!');
+      console.error(error.message);
+    } else {
+      console.log(`yt-dlp version: ${stdout.trim()}`);
+      process.env.YTDLP_VERSION = stdout.trim();
+    }
+  });
 });

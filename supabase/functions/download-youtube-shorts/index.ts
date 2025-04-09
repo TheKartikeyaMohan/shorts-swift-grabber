@@ -132,7 +132,7 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
     
     console.log(`Extracted video ID: ${videoId}`);
     
-    // Use the correct endpoint format from the user's examples
+    // Use the correct RapidAPI endpoint format with proper host and key
     const apiUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`;
     
     console.log(`Calling RapidAPI endpoint: ${apiUrl}`);
@@ -140,8 +140,8 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
     const response = await fetch(apiUrl, {
       method: "GET",
       headers: {
-        "x-rapidapi-key": rapidApiKey,
-        "x-rapidapi-host": "youtube-video-and-shorts-downloader.p.rapidapi.com"
+        "X-RapidAPI-Key": rapidApiKey,
+        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com"
       }
     });
     

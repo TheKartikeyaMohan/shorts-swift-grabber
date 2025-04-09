@@ -8,6 +8,7 @@ import AdBanner from "@/components/AdBanner";
 import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -51,7 +52,7 @@ const Index = () => {
         <div className="py-10 text-center">
           <h1 className="text-2xl font-bold mb-2 text-slate-800">YouTube Shorts Downloader</h1>
           <p className="text-sm text-slate-500">
-            Download any YouTube Shorts video in high quality
+            Download any YouTube Shorts video in high quality - <span className="bg-gradient-to-r from-red-50 to-red-100 px-1.5 py-0.5 rounded-sm font-medium">100% Free</span>
           </p>
         </div>
         
@@ -75,6 +76,9 @@ const Index = () => {
             <div className="text-center py-12 yt-card bg-white/60 backdrop-blur-sm mx-auto max-w-xl p-8 rounded-xl">
               <p className="text-sm text-slate-500">
                 Paste a YouTube URL above and click Download
+              </p>
+              <p className="text-xs mt-4 text-slate-400">
+                No registration required · <span className="font-medium text-red-500">Free</span> · No watermarks
               </p>
             </div>
           )}

@@ -23,6 +23,10 @@ const isValidYoutubeUrl = (url: string): boolean => {
 
 serve(async (req: Request) => {
   console.log("Function invoked:", new Date().toISOString());
+  console.log("Checking environment variables:");
+  console.log("SUPABASE_URL:", Deno.env.get("SUPABASE_URL") ? "Set" : "Not set");
+  console.log("SUPABASE_ANON_KEY:", Deno.env.get("SUPABASE_ANON_KEY") ? "Set" : "Not set");
+  console.log("RAPIDAPI_KEY:", Deno.env.get("RAPIDAPI_KEY") ? "Set" : "Not set");
   
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -43,7 +47,18 @@ serve(async (req: Request) => {
     }
 
     // Parse request body
-    const { url } = await req.json();
+    const reqBody = await req.text();
+    console.log("Request body:", reqBody);
+    
+    let url;
+    try {
+      const json = JSON.parse(reqBody);
+      url = json.url;
+    } catch (parseError) {
+      console.error("Error parsing request body:", parseError);
+      throw new Error("Invalid request format: " + parseError.message);
+    }
+    
     console.log("Processing URL:", url);
     
     // Validate URL format
@@ -55,8 +70,16 @@ serve(async (req: Request) => {
     const clientIp = req.headers.get("x-forwarded-for") || "unknown";
     console.log("Client IP:", clientIp);
 
+    // Log headers for debugging
+    console.log("Request headers:");
+    for (const [key, value] of req.headers.entries()) {
+      console.log(`${key}: ${value}`);
+    }
+
     // Call the RapidAPI YouTube downloader
     console.log("Fetching video data from RapidAPI");
+    console.log("RapidAPI URL: https://youtube-video-download-v2.p.rapidapi.com/");
+    
     const apiResponse = await fetch("https://youtube-video-download-v2.p.rapidapi.com/", {
       method: "POST",
       headers: {
@@ -121,7 +144,8 @@ serve(async (req: Request) => {
     
     // If we have the URL from the request, log the error
     try {
-      const { url } = await req.json();
+      const reqBody = await req.text();
+      const { url } = JSON.parse(reqBody);
       if (url) {
         // Log error to Supabase
         const { error: dbError } = await supabase.from("downloads").insert({

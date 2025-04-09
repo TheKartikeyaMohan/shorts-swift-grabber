@@ -156,8 +156,9 @@ serve(async (req) => {
       );
     }
 
-    // Make request to RapidAPI - UPDATED to use GET with query parameters as verified by user
+    // Make request to RapidAPI using GET with the url as a query parameter
     const queryUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download?id=${encodeURIComponent(standardUrl)}`;
+    console.log(`Calling RapidAPI with: ${queryUrl}`);
     
     try {
       const apiResponse = await fetch(queryUrl, {
@@ -189,7 +190,7 @@ serve(async (req) => {
 
       // Parse API response
       const data = await apiResponse.json();
-      console.log("API Response:", JSON.stringify(data, null, 2));
+      console.log("API Response structure:", Object.keys(data));
       
       if (!data || !data.formats) {
         console.error("Invalid API response:", data);
@@ -208,7 +209,7 @@ serve(async (req) => {
         );
       }
 
-      console.log("Received formats:", Object.keys(data.formats));
+      console.log("Received format types:", Object.keys(data.formats));
       
       // Process formats based on requested format type
       let downloadUrl = "";
@@ -292,6 +293,31 @@ serve(async (req) => {
         );
       }
 
+      // Check if the URL is directly accessible with a simple HEAD request
+      try {
+        console.log(`Verifying download URL: ${downloadUrl.substring(0, 100)}...`);
+        
+        // For YouTube URLs, we'll skip this check as YouTube blocks HEAD requests
+        if (!downloadUrl.includes('youtube.com') && !downloadUrl.includes('youtu.be')) {
+          const urlCheckResponse = await fetch(downloadUrl, { 
+            method: 'HEAD',
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            }
+          });
+          
+          if (!urlCheckResponse.ok) {
+            console.warn(`Download URL check failed with status: ${urlCheckResponse.status}`);
+          } else {
+            console.log("Download URL is accessible");
+          }
+        } else {
+          console.log("Skipping HEAD check for YouTube URL");
+        }
+      } catch (error) {
+        console.warn(`Error verifying download URL: ${error.message}`);
+      }
+
       // Prepare success response with REAL download URL from RapidAPI
       const result = {
         title: data.title || "YouTube Video",
@@ -304,10 +330,12 @@ serve(async (req) => {
         isAudio,
       };
 
+      console.log("Successful response with download URL length:", downloadUrl.length);
+
       // Log successful download to Supabase
       await logToSupabase({
         video_url: standardUrl,
-        download_url: downloadUrl,
+        download_url: downloadUrl.substring(0, 100) + "...", // Only log part of URL for privacy
         status: "success",
         format,
         quality: selectedQuality,

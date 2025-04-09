@@ -49,22 +49,46 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       
       toast.info(`Starting ${selectedFormat === "mp3" ? "audio" : "video"} download...`);
 
-      // Direct download if we already have the URL
+      // Check if we already have a valid download URL
       if (downloadUrl) {
+        console.log("Download URL available:", downloadUrl);
+        
+        // Skip HEAD check for YouTube URLs which may block HEAD requests
+        if (downloadUrl.includes('youtube.com') || downloadUrl.includes('youtu.be')) {
+          console.log("YouTube URL detected - skipping HEAD check");
+          startDownload(downloadUrl, title, format || selectedFormat);
+          toast.success("Download started!");
+          setDownloading(false);
+          return;
+        }
+        
         try {
-          console.log("Attempting download with URL:", downloadUrl);
+          console.log("Attempting to validate download URL:", downloadUrl);
           
           // Try fetching the download URL first to check if it's accessible
-          const checkResponse = await fetch(downloadUrl, { method: 'HEAD' }).catch(() => null);
+          // Use a timeout to prevent hanging on slow responses
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          
+          const checkResponse = await fetch(downloadUrl, { 
+            method: 'HEAD',
+            signal: controller.signal
+          }).catch(err => {
+            console.log("HEAD check failed:", err.message);
+            return null;
+          });
+          
+          clearTimeout(timeoutId);
           
           if (checkResponse && checkResponse.ok) {
             // URL is accessible, start download
+            console.log("URL validation passed, starting download");
             startDownload(downloadUrl, title, format || selectedFormat);
             toast.success("Download started!");
             setDownloading(false);
             return;
           } else {
-            console.log("Download URL not accessible, will try to regenerate", downloadUrl);
+            console.log("Download URL not accessible, will regenerate", downloadUrl);
             // Continue to regenerate if URL is not accessible
           }
         } catch (error) {
@@ -74,6 +98,8 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       }
       
       // If we reach here, we need to regenerate the download URL
+      console.log("No valid download URL available, requesting from Edge Function");
+      
       // Increment retry count for analytics
       setRetryCount(prev => prev + 1);
       
@@ -92,22 +118,27 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         }
       });
       
-      console.log("Edge function response:", data, error);
+      console.log("Edge function complete response:", data);
       
       if (error) {
         console.error("Edge function error:", error);
         throw new Error(error.message || "Download failed");
       }
       
-      if (!data || !data.downloadUrl) {
-        console.error("Invalid response structure:", data);
+      if (!data) {
+        console.error("Empty response from edge function");
+        throw new Error("No data returned from server");
+      }
+      
+      if (!data.downloadUrl) {
+        console.error("Missing downloadUrl in response:", data);
         throw new Error("No download URL provided");
       }
       
       console.log("Received download URL from API:", data.downloadUrl);
       
-      // Start the download with the real URL from RapidAPI
-      startDownload(data.downloadUrl, title, data.format || selectedFormat);
+      // Start the download with the URL from RapidAPI
+      startDownload(data.downloadUrl, title || data.title, data.format || selectedFormat);
       toast.success("Download started!");
       
     } catch (error) {
@@ -129,19 +160,34 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     // Log the actual URL being used for download
     console.log("Starting download with URL:", url);
     
-    // Create a hidden link and click it to start the download
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${title || 'youtube_video'}.${format}`;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // For YouTube or other streaming URLs that require browser handling
+    if (url.includes('youtube.com') || url.includes('youtu.be') || 
+        url.includes('googlevideo.com') || url.includes('stream')) {
+      console.log("Streaming URL detected - opening in new tab");
+      window.open(url, "_blank");
+      return;
+    }
     
-    // Open URL in new tab as fallback if download attribute isn't supported
-    // or for certain URL types that browsers handle differently
-    window.open(url, "_blank");
+    // For direct file downloads, try to use download attribute
+    try {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${title || 'youtube_video'}.${format}`;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // As a fallback, also open in new tab in case download attribute isn't supported
+      setTimeout(() => {
+        window.open(url, "_blank");
+      }, 1000);
+    } catch (error) {
+      console.error("Error creating download link:", error);
+      // Last resort fallback
+      window.open(url, "_blank");
+    }
   };
 
   return (

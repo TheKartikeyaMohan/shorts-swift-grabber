@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ interface VideoResultProps {
 const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
   const { title, thumbnail, duration, author, downloadUrl, quality, format } = videoInfo;
   const [downloading, setDownloading] = useState<boolean>(false);
+  const [retryCount, setRetryCount] = useState<number>(0);
 
   const formatOptions = {
     mp4: { label: "Video", format: "mp4", quality: quality || "720p" },
@@ -49,17 +51,36 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
 
       // Direct download if we already have the URL
       if (downloadUrl) {
-        startDownload(downloadUrl, title, format || selectedFormat);
-        toast.success("Download started!");
-        setDownloading(false);
-        return;
+        try {
+          // Try fetching the download URL first to check if it's accessible
+          const checkResponse = await fetch(downloadUrl, { method: 'HEAD' }).catch(() => null);
+          
+          if (checkResponse && checkResponse.ok) {
+            // URL is accessible, start download
+            startDownload(downloadUrl, title, format || selectedFormat);
+            toast.success("Download started!");
+            setDownloading(false);
+            return;
+          } else {
+            console.log("Download URL not accessible, will try to regenerate", downloadUrl);
+            // Continue to regenerate if URL is not accessible
+          }
+        } catch (error) {
+          console.error("Error checking download URL:", error);
+          // Continue to regenerate
+        }
       }
       
-      // Otherwise call our edge function
+      // If we reach here, we need to regenerate the download URL
+      // Increment retry count for analytics
+      setRetryCount(prev => prev + 1);
+      
+      // Call our edge function
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           url: storedUrl, 
-          format: selectedFormat
+          format: selectedFormat,
+          quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p')
         }
       });
       
@@ -79,6 +100,13 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     } catch (error) {
       console.error("Download error:", error);
       toast.error(error instanceof Error ? error.message : "Download failed");
+      
+      // Fallback - open YouTube URL directly if all else fails
+      const storedUrl = localStorage.getItem("lastYoutubeUrl");
+      if (storedUrl && retryCount > 1) {
+        toast.info("Opening original YouTube video as fallback...");
+        window.open(storedUrl, "_blank");
+      }
     } finally {
       setDownloading(false);
     }
@@ -94,6 +122,12 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Open URL in new tab as fallback if download attribute isn't supported
+    // or for certain URL types that browsers handle differently
+    if (url.includes('youtube.com') || url.includes('rapidapi.com')) {
+      window.open(url, "_blank");
+    }
   };
 
   return (

@@ -88,8 +88,34 @@ const Index = () => {
     } catch (error) {
       console.error("Error processing download:", error);
       toast.error(error instanceof Error ? error.message : "Error processing video");
+      
+      // Create a basic fallback response in case of errors
+      // This allows the user to at least see some UI
+      const videoId = extractVideoId(url);
+      if (videoId) {
+        const fallbackInfo: VideoInfo = {
+          title: "YouTube Shorts Video",
+          thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          duration: "Unknown",
+          author: "YouTube Creator",
+          downloadUrl: url, // Just link back to YouTube as fallback
+          quality: quality || "720p",
+          format: format,
+          isAudio: format === "mp3"
+        };
+        
+        setVideoInfo(fallbackInfo);
+        toast.error("Using fallback mode due to server error. Download may not work.");
+      }
+      
       setIsLoading(false);
     }
+  };
+
+  const extractVideoId = (url: string): string | null => {
+    const regex = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]+)/;
+    const match = url.match(regex);
+    return match ? match[1] : null;
   };
 
   const handleExpressDownload = async (url: string, format: string, quality?: string) => {
@@ -151,51 +177,74 @@ const Index = () => {
 
   const handleEdgeFunctionDownload = async (url: string, format: string, quality?: string) => {
     try {
-      // Call our Supabase Edge Function with format AND quality
-      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
-        body: { 
-          url: url,
-          format: format,
-          quality: quality || (format === 'mp4' ? '720p' : 'high')
+      // Try multiple times if needed with exponential backoff
+      let attempts = 0;
+      const maxAttempts = 3;
+      let error: Error | null = null;
+      
+      while (attempts < maxAttempts) {
+        try {
+          // Call our Supabase Edge Function with format AND quality
+          const { data, error: supabaseError } = await supabase.functions.invoke('download-youtube-shorts', {
+            body: { 
+              url: url,
+              format: format,
+              quality: quality || (format === 'mp4' ? '720p' : 'high')
+            }
+          });
+          
+          if (supabaseError) {
+            console.error(`Edge function error (attempt ${attempts + 1}):`, supabaseError);
+            throw new Error(supabaseError.message || "Failed to fetch video");
+          }
+          
+          if (!data) {
+            throw new Error("No data returned from API");
+          }
+          
+          // Store the URL and format in localStorage for the download function
+          localStorage.setItem("lastYoutubeUrl", url);
+          localStorage.setItem("lastFormat", format);
+          if (quality) localStorage.setItem("lastQuality", quality);
+          
+          // Prepare video info from the response
+          const videoData: VideoInfo = {
+            title: data.title || "YouTube Video",
+            thumbnail: data.thumbnail || "",
+            duration: data.duration || "",
+            author: data.author || "",
+            downloadUrl: data.downloadUrl,
+            quality: data.quality || quality || "",
+            format: data.format || format,
+            isAudio: data.isAudio || format === "mp3",
+            formats: [
+              { label: "HD", quality: "720p", format: "mp4" },
+              { label: "SD", quality: "480p", format: "mp4" },
+              { label: "Low", quality: "360p", format: "mp4" },
+              { label: "Audio", quality: "high", format: "mp3" },
+            ]
+          };
+          
+          setVideoInfo(videoData);
+          toast.success("Video ready for download!");
+          return; // Success, exit the retry loop
+        } catch (attemptError) {
+          error = attemptError instanceof Error ? attemptError : new Error(String(attemptError));
+          attempts++;
+          
+          if (attempts < maxAttempts) {
+            // Exponential backoff: 1s, 2s, 4s...
+            const delay = Math.pow(2, attempts - 1) * 1000;
+            toast.info(`Retrying download (attempt ${attempts + 1} of ${maxAttempts})...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
-      });
-      
-      if (error) {
-        console.error("Edge function error:", error);
-        throw new Error(error.message || "Failed to fetch video");
       }
       
-      if (!data) {
-        throw new Error("No data returned from API");
-      }
-      
-      // Store the URL and format in localStorage for the download function
-      localStorage.setItem("lastYoutubeUrl", url);
-      localStorage.setItem("lastFormat", format);
-      if (quality) localStorage.setItem("lastQuality", quality);
-      
-      // Prepare video info from the response
-      const videoData: VideoInfo = {
-        title: data.title || "YouTube Video",
-        thumbnail: data.thumbnail || "",
-        duration: data.duration || "",
-        author: data.author || "",
-        downloadUrl: data.downloadUrl,
-        quality: data.quality || quality || "",
-        format: data.format || format,
-        isAudio: data.isAudio || format === "mp3",
-        formats: [
-          { label: "HD", quality: "720p", format: "mp4" },
-          { label: "SD", quality: "480p", format: "mp4" },
-          { label: "Low", quality: "360p", format: "mp4" },
-          { label: "Audio", quality: "high", format: "mp3" },
-        ]
-      };
-      
-      setVideoInfo(videoData);
-      toast.success("Video ready for download!");
+      // If we're here, all attempts failed
+      if (error) throw error;
     } catch (error) {
-      console.error("Edge function error:", error);
+      console.error("Edge function final error:", error);
       throw error;
     } finally {
       setIsLoading(false);

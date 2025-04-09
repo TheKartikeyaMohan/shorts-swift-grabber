@@ -1,7 +1,7 @@
 
 // Download YouTube Shorts Edge Function
-// This function uses a YouTube downloader API to handle video downloads
-// and returns the download URL to the client
+// This function uses multiple API providers to handle video downloads
+// and ensures direct downloadable media file URLs
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.7.1";
@@ -148,102 +148,277 @@ serve(async (req) => {
       );
     }
 
-    // Use Y2Mate API for more reliable direct download links
-    const apiUrl = "https://y2mate-api.onrender.com/api/convert";
-    console.log(`Calling Y2Mate API with video ID: ${videoId}`);
+    // Try multiple APIs to get direct download links
+    let directVideoUrl = "";
+    let videoTitle = "";
+    let videoThumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+    let videoDuration = "";
+    let videoAuthor = "";
+    let apiSuccess = false;
     
+    // 1. First attempt: Try Cobalt API (generally works well for direct downloads)
     try {
-      const apiResponse = await fetch(apiUrl, {
+      console.log("Trying Cobalt API...");
+      const cobaltResponse = await fetch(`https://co.wuk.sh/api/json`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           url: standardUrl,
-          quality: quality === "720p" ? "720" : quality === "480p" ? "480" : "360",
-          format: format === "mp3" ? "mp3" : "mp4"
-        }),
+          vQuality: quality === "720p" ? "720" : quality === "480p" ? "480" : "360",
+          filenamePattern: "basic",
+          isAudioOnly: format === "mp3",
+          disableMetadata: true
+        })
       });
-
-      // Handle API errors
-      if (!apiResponse.ok) {
-        const errorText = await apiResponse.text();
-        console.error(`Y2Mate API error (${apiResponse.status}): ${errorText}`);
-        
-        // Fallback to RapidAPI
-        console.log("Falling back to RapidAPI...");
-        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
-      }
-
-      // Parse API response
-      const data = await apiResponse.json();
-      console.log("Y2Mate API Response:", data);
       
-      if (!data || !data.url) {
-        console.error("Invalid Y2Mate API response:", data);
+      if (cobaltResponse.ok) {
+        const cobaltData = await cobaltResponse.json();
+        console.log("Cobalt API Response:", cobaltData);
         
-        // Fallback to RapidAPI if no download URL
-        console.log("No direct URL in Y2Mate response, falling back to RapidAPI...");
-        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
+        if (cobaltData.status === "success" && cobaltData.url) {
+          directVideoUrl = cobaltData.url;
+          videoTitle = cobaltData.meta?.title || "YouTube Video";
+          videoDuration = cobaltData.meta?.duration || "";
+          videoAuthor = cobaltData.meta?.uploader || "";
+          apiSuccess = true;
+          console.log("Direct download URL obtained from Cobalt API:", directVideoUrl);
+        }
       }
-
-      // Y2Mate API returns direct download URLs
-      const directUrl = data.url;
-      
-      // Test if the URL is actually accessible
+    } catch (cobaltError) {
+      console.error("Cobalt API error:", cobaltError);
+      // Continue to next API
+    }
+    
+    // 2. Second attempt: If Cobalt fails, try RapidAPI
+    if (!apiSuccess) {
       try {
-        const testResponse = await fetch(directUrl, { 
-          method: 'HEAD',
-          headers: { 'User-Agent': 'Mozilla/5.0' }
+        console.log("Trying RapidAPI service...");
+        const rapidApiResponse = await fetch("https://youtube-video-download-info.p.rapidapi.com/dl", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-RapidAPI-Key": rapidApiKey,
+            "X-RapidAPI-Host": "youtube-video-download-info.p.rapidapi.com"
+          },
+          body: JSON.stringify({
+            url: standardUrl
+          })
         });
         
-        if (!testResponse.ok) {
-          console.error(`Direct URL test failed: ${testResponse.status}`);
-          // Fallback to RapidAPI if URL test fails
-          return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
+        if (rapidApiResponse.ok) {
+          const rapidApiData = await rapidApiResponse.json();
+          console.log("RapidAPI Response:", rapidApiData);
+          
+          if (rapidApiData && rapidApiData.formats) {
+            // For video formats
+            if (format === "mp4") {
+              // Sort available formats by quality (resolution)
+              const videoFormats = rapidApiData.formats
+                .filter((f: any) => f.ext === "mp4" && f.height)
+                .sort((a: any, b: any) => b.height - a.height);
+              
+              // Find closest match to requested quality
+              let selectedFormat;
+              if (quality === "720p") {
+                selectedFormat = videoFormats.find((f: any) => f.height <= 720) || videoFormats[0];
+              } else if (quality === "480p") {
+                selectedFormat = videoFormats.find((f: any) => f.height <= 480) || videoFormats[0];
+              } else {
+                selectedFormat = videoFormats.find((f: any) => f.height <= 360) || videoFormats[0];
+              }
+              
+              if (selectedFormat && selectedFormat.url) {
+                directVideoUrl = selectedFormat.url;
+                apiSuccess = true;
+                console.log(`Selected video format: ${selectedFormat.height}p, URL: ${directVideoUrl.substring(0, 50)}...`);
+              }
+            } 
+            // For audio formats
+            else if (format === "mp3") {
+              // Find audio formats
+              const audioFormats = rapidApiData.formats
+                .filter((f: any) => f.acodec !== "none" && !f.height)
+                .sort((a: any, b: any) => b.abr - a.abr);
+              
+              if (audioFormats.length > 0 && audioFormats[0].url) {
+                directVideoUrl = audioFormats[0].url;
+                apiSuccess = true;
+                console.log(`Selected audio format with bitrate: ${audioFormats[0].abr}kbps, URL: ${directVideoUrl.substring(0, 50)}...`);
+              }
+            }
+            
+            // Get video metadata
+            videoTitle = rapidApiData.title || "YouTube Video";
+            videoThumbnail = rapidApiData.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+            videoDuration = rapidApiData.duration_string || "";
+            videoAuthor = rapidApiData.uploader || "";
+          }
         }
-        
-        console.log("Direct URL test successful!");
-      } catch (testError) {
-        console.error("Error testing direct URL:", testError);
-        // Continue anyway as some servers might block HEAD requests
+      } catch (rapidApiError) {
+        console.error("RapidAPI error:", rapidApiError);
+        // Continue to next API
       }
+    }
+    
+    // 3. Third attempt: If both fail, try YT1S service
+    if (!apiSuccess) {
+      try {
+        console.log("Trying YT1S service...");
+        const yt1sFormData = new FormData();
+        yt1sFormData.append("q", standardUrl);
+        yt1sFormData.append("vt", format === "mp3" ? "mp3" : "mp4");
+        
+        const yt1sResponse = await fetch("https://yt1s.com/api/ajaxSearch", {
+          method: "POST",
+          body: yt1sFormData
+        });
+        
+        if (yt1sResponse.ok) {
+          const yt1sData = await yt1sResponse.json();
+          console.log("YT1S initial response:", yt1sData);
+          
+          if (yt1sData && yt1sData.links) {
+            // For video formats (mp4)
+            if (format === "mp4") {
+              const mp4Options = yt1sData.links.mp4;
+              let selectedKey = "";
+              
+              // Select quality based on user preference
+              if (quality === "720p" && mp4Options["720p"]) {
+                selectedKey = "720p";
+              } else if (quality === "480p" && mp4Options["480p"]) {
+                selectedKey = "480p";
+              } else if (mp4Options["360p"]) {
+                selectedKey = "360p";
+              } else {
+                // Get first available quality
+                selectedKey = Object.keys(mp4Options)[0];
+              }
+              
+              if (selectedKey && mp4Options[selectedKey].k) {
+                const convertFormData = new FormData();
+                convertFormData.append("vid", yt1sData.vid);
+                convertFormData.append("k", mp4Options[selectedKey].k);
+                
+                const convertResponse = await fetch("https://yt1s.com/api/ajaxConvert", {
+                  method: "POST",
+                  body: convertFormData
+                });
+                
+                if (convertResponse.ok) {
+                  const convertData = await convertResponse.json();
+                  console.log("YT1S convert response:", convertData);
+                  
+                  if (convertData && convertData.dlink) {
+                    directVideoUrl = convertData.dlink;
+                    apiSuccess = true;
+                    console.log(`YT1S direct link obtained: ${directVideoUrl.substring(0, 50)}...`);
+                  }
+                }
+              }
+            } 
+            // For audio formats (mp3)
+            else if (format === "mp3" && yt1sData.links.mp3["128kbps"]) {
+              const convertFormData = new FormData();
+              convertFormData.append("vid", yt1sData.vid);
+              convertFormData.append("k", yt1sData.links.mp3["128kbps"].k);
+              
+              const convertResponse = await fetch("https://yt1s.com/api/ajaxConvert", {
+                method: "POST",
+                body: convertFormData
+              });
+              
+              if (convertResponse.ok) {
+                const convertData = await convertResponse.json();
+                console.log("YT1S convert response:", convertData);
+                
+                if (convertData && convertData.dlink) {
+                  directVideoUrl = convertData.dlink;
+                  apiSuccess = true;
+                  console.log(`YT1S direct link obtained: ${directVideoUrl.substring(0, 50)}...`);
+                }
+              }
+            }
+            
+            // Get video metadata
+            videoTitle = yt1sData.title || "YouTube Video";
+            videoDuration = yt1sData.t || "";
+          }
+        }
+      } catch (yt1sError) {
+        console.error("YT1S API error:", yt1sError);
+        // Continue to final fallback
+      }
+    }
 
-      // Prepare success response with download URLs
-      const result = {
-        title: data.title || "YouTube Video",
-        thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        duration: data.duration || "",
-        author: data.channel || "",
-        downloadUrl: directUrl,
-        directUrl: directUrl, // Same as downloadUrl since it's already direct
-        quality: quality || "",
-        format,
-        isAudio: format === "mp3",
-      };
-
-      console.log("Successful response with URLs:");
-      console.log("- directUrl sample:", directUrl.substring(0, 50) + "...");
-
-      // Log successful download to Supabase
-      await logToSupabase({
-        video_url: standardUrl,
-        download_url: directUrl.substring(0, 100) + "...", // Only log part of URL for privacy
-        status: "success",
-        format,
-        quality: quality || "",
-        ip_address: clientIP,
-      });
-
-      // Return successful response with the URLs
-      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
-    } catch (apiError) {
-      console.error("Y2Mate API request error:", apiError);
-      
-      // Fallback to RapidAPI
-      console.log("Error with Y2Mate API, falling back to RapidAPI...");
+    // If we failed to get a direct download URL, use fallback RapidAPI
+    if (!apiSuccess) {
+      console.log("All direct download attempts failed, using fallback RapidAPI...");
       return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
     }
+    
+    // Test if the URL is actually accessible with a HEAD request
+    try {
+      console.log(`Testing direct URL with HEAD request: ${directVideoUrl.substring(0, 50)}...`);
+      const testResponse = await fetch(directVideoUrl, { 
+        method: 'HEAD',
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      
+      if (!testResponse.ok) {
+        console.error(`Direct URL test failed: ${testResponse.status}`);
+        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
+      }
+      
+      // Get Content-Type to verify it's a media file
+      const contentType = testResponse.headers.get('content-type') || '';
+      console.log(`Content-Type for direct URL: ${contentType}`);
+      
+      const isMediaFile = contentType.includes('video/') || 
+                           contentType.includes('audio/') || 
+                           contentType.includes('application/octet-stream');
+      
+      if (!isMediaFile) {
+        console.log("URL doesn't appear to be a direct media file, falling back to RapidAPI");
+        return await useRapidAPIFallback(rapidApiKey, standardUrl, format, quality || "", clientIP, corsHeaders);
+      }
+      
+      console.log("Direct URL test successful!");
+    } catch (testError) {
+      console.error("Error testing direct URL:", testError);
+      // Continue anyway, some servers might block HEAD requests but allow GET
+    }
+
+    // Prepare success response with download URLs
+    const result = {
+      title: videoTitle,
+      thumbnail: videoThumbnail,
+      duration: videoDuration,
+      author: videoAuthor,
+      downloadUrl: directVideoUrl,
+      directUrl: directVideoUrl, // Same as downloadUrl since it's already direct
+      quality: quality || "",
+      format,
+      isAudio: format === "mp3",
+    };
+
+    console.log("Successful response with direct URLs:");
+    console.log("- directUrl sample:", directVideoUrl.substring(0, 50) + "...");
+
+    // Log successful download to Supabase
+    await logToSupabase({
+      video_url: standardUrl,
+      download_url: directVideoUrl.substring(0, 100) + "...", // Only log part of URL for privacy
+      status: "success",
+      format,
+      quality: quality || "",
+      ip_address: clientIP,
+    });
+
+    // Return successful response with the URLs
+    return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
   } catch (error) {
     console.error("Edge function error:", error);
     

@@ -156,18 +156,16 @@ serve(async (req) => {
       );
     }
 
-    // Make request to RapidAPI - UPDATED ENDPOINT
-    const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/links";
+    // Make request to RapidAPI - UPDATED to use GET with query parameters as verified by user
+    const queryUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download?id=${encodeURIComponent(standardUrl)}`;
     
     try {
-      const apiResponse = await fetch(apiUrl, {
-        method: "POST",
+      const apiResponse = await fetch(queryUrl, {
+        method: "GET",
         headers: {
-          "Content-Type": "application/json",
           "X-RapidAPI-Key": rapidApiKey,
           "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com",
         },
-        body: JSON.stringify({ url: standardUrl }),
       });
 
       // Handle API errors

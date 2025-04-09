@@ -1,5 +1,5 @@
 
-import { Download, Check } from "lucide-react";
+import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useState } from "react";
@@ -22,9 +22,9 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const downloadOptions = [
-    { label: "MP4 - 720p (HD)", quality: "720p", format: "mp4" },
-    { label: "MP4 - 360p (SD)", quality: "360p", format: "mp4" },
-    { label: "MP3 - Audio Only", quality: "128kbps", format: "mp3" },
+    { label: "HD Video", quality: "720p", format: "mp4" },
+    { label: "SD Video", quality: "360p", format: "mp4" },
+    { label: "Audio Only", quality: "128kbps", format: "mp3" },
   ];
 
   const handleDownload = (quality: string, format: string) => {
@@ -32,8 +32,8 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
     
     // Simulate download success after 2 seconds
     setTimeout(() => {
-      toast.success(`Your ${format.toUpperCase()} file is ready!`, {
-        description: `${title} has been downloaded successfully.`,
+      toast.success(`Your ${format === 'mp3' ? 'audio' : 'video'} is ready!`, {
+        description: `Download started automatically.`,
       });
       setDownloading(null);
       
@@ -45,7 +45,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
 
   return (
     <Card className="w-full overflow-hidden shadow-md rounded-xl">
-      <div className="aspect-video relative overflow-hidden">
+      <div className="aspect-video relative overflow-hidden bg-black">
         <img 
           src={thumbnail} 
           alt={title} 
@@ -58,27 +58,23 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
         )}
       </div>
       
-      <div className="p-4 space-y-3">
-        <h3 className="font-bold text-lg line-clamp-2">{title}</h3>
+      <div className="p-4 space-y-4">
+        <h3 className="font-bold text-xl line-clamp-2">{title}</h3>
         {author && <p className="text-sm text-muted-foreground">{author}</p>}
         
-        <div className="space-y-3 pt-2">
-          <div className="bg-muted/40 p-3 rounded-lg">
-            <p className="font-medium text-sm mb-2">Select Format:</p>
-            <div className="grid grid-cols-3 gap-2">
-              {downloadOptions.map((option) => (
-                <Button
-                  key={option.label}
-                  variant={selectedFormat === option.quality ? "default" : "outline"}
-                  className={selectedFormat === option.quality ? "bg-youtube hover:bg-youtube/90" : "border-youtube/30 text-youtube hover:bg-youtube/10"}
-                  size="sm"
-                  onClick={() => setSelectedFormat(option.quality)}
-                >
-                  {option.format.toUpperCase()}
-                  <span className="text-xs ml-1">{option.quality}</span>
-                </Button>
-              ))}
-            </div>
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {downloadOptions.map((option) => (
+              <Button
+                key={option.quality}
+                variant={selectedFormat === option.quality ? "default" : "outline"}
+                className={`h-14 ${selectedFormat === option.quality ? "bg-youtube hover:bg-youtube/90" : "border border-youtube/30 text-youtube hover:bg-youtube/10"}`}
+                onClick={() => setSelectedFormat(option.quality)}
+                size="lg"
+              >
+                {option.label}
+              </Button>
+            ))}
           </div>
           
           <Button
@@ -88,25 +84,13 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
                 handleDownload(option.quality, option.format);
               }
             }}
-            className="w-full bg-youtube hover:bg-youtube/90 h-12 rounded-full"
+            className="w-full bg-youtube hover:bg-youtube/90 h-14 rounded-full text-lg font-medium"
             disabled={!!downloading}
+            size="lg"
           >
-            {downloading ? (
-              <>
-                <Check className="w-5 h-5 mr-2 animate-pulse" />
-                Downloading...
-              </>
-            ) : (
-              <>
-                <Download className="w-5 h-5 mr-2" />
-                Download {selectedFormat}
-              </>
-            )}
+            <Download className="w-5 h-5 mr-2" />
+            {downloading ? "Starting Download..." : "Download Now"}
           </Button>
-          
-          <p className="text-xs text-center text-muted-foreground mt-2">
-            No registration or software needed. 100% free.
-          </p>
         </div>
       </div>
     </Card>

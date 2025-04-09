@@ -8,11 +8,14 @@ import AdBanner from "@/components/AdBanner";
 import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { toast } from "sonner";
+import { ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<any>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
 
   // Check for user's preferred color scheme on initial load
   useEffect(() => {
@@ -37,7 +40,7 @@ const Index = () => {
       setTimeout(() => {
         // Mock data for demonstration
         const mockVideoInfo = {
-          title: "Amazing YouTube Shorts Video - Top trending video that everyone is watching right now #shorts",
+          title: "Amazing YouTube Shorts Video - Top trending video #shorts",
           thumbnail: "https://picsum.photos/seed/shorts/640/360", // Random placeholder image
           duration: "0:58",
           author: "Popular Creator",
@@ -47,7 +50,7 @@ const Index = () => {
         setIsLoading(false);
         
         // Success toast
-        toast.success("Video found!", {
+        toast.success("Video found successfully!", {
           description: "Choose your download format below.",
         });
       }, 3000);
@@ -82,10 +85,10 @@ const Index = () => {
       <Header toggleTheme={toggleTheme} isDarkMode={isDarkMode} />
       
       <main className="flex-1 max-w-xl mx-auto w-full px-4 pb-20">
-        <div className="py-6 text-center">
-          <h1 className="text-2xl font-bold mb-2">Download YouTube Shorts</h1>
-          <p className="text-muted-foreground">
-            Download your favorite YouTube Shorts videos in MP4 or MP3 format for free!
+        <div className="py-8 text-center">
+          <h1 className="text-3xl font-bold mb-2">YouTube Shorts Downloader</h1>
+          <p className="text-muted-foreground text-lg">
+            Save videos in high quality - fast & free!
           </p>
         </div>
         
@@ -105,30 +108,38 @@ const Index = () => {
             </>
           ) : (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">
-                Paste a YouTube Shorts URL and click Download
-              </p>
+              <Button 
+                variant="link" 
+                onClick={() => setShowInstructions(!showInstructions)}
+                className="flex items-center mx-auto mb-2 text-muted-foreground"
+              >
+                How it works <ChevronDown className={`ml-1 transition-transform ${showInstructions ? 'rotate-180' : ''}`} size={16} />
+              </Button>
+              
+              {showInstructions && (
+                <div className="bg-muted/30 p-6 rounded-xl text-left mt-4 space-y-4">
+                  <ol className="list-decimal pl-5 space-y-2">
+                    <li>Copy the link of any YouTube Shorts video</li>
+                    <li>Click the "Paste" button or paste URL in the box</li>
+                    <li>Click the "Download Now" button</li>
+                    <li>Select your preferred quality</li>
+                    <li>Download starts automatically!</li>
+                  </ol>
+                </div>
+              )}
             </div>
           )}
         </div>
         
-        <div className="mt-8 space-y-4">
-          <h2 className="text-xl font-bold">How to Download YouTube Shorts</h2>
-          <ol className="list-decimal pl-6 space-y-2 text-sm">
-            <li>Copy the URL of the YouTube Shorts video you want to download</li>
-            <li>Paste the URL in the search box above</li>
-            <li>Click on the "Download" button</li>
-            <li>Select your preferred format (MP4 or MP3)</li>
-            <li>Enjoy your downloaded video!</li>
-          </ol>
-          
-          <h2 className="text-xl font-bold mt-6">About YouTubeShorts.in</h2>
-          <p className="text-sm text-muted-foreground">
-            YouTubeShorts.in is a free online tool that allows you to download YouTube Shorts videos
-            without watermark in various formats. Our service is fast, reliable, and doesn't require any registration.
-            We support high-quality downloads, including 720p, 360p, and MP3 audio formats.
-          </p>
-        </div>
+        {!videoInfo && !isLoading && (
+          <div className="mt-8 rounded-lg bg-muted/20 p-6">
+            <h2 className="text-xl font-bold mb-3">About YouTubeShorts.in</h2>
+            <p className="text-muted-foreground">
+              A simple tool to download YouTube Shorts videos without watermarks. 
+              Works with all devices - no apps or registration needed!
+            </p>
+          </div>
+        )}
       </main>
       
       <Footer />

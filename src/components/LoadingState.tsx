@@ -1,5 +1,5 @@
 
-import { Circle } from "lucide-react";
+import { Youtube } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { useState, useEffect } from "react";
 
@@ -8,29 +8,37 @@ const LoadingState = () => {
   
   useEffect(() => {
     const timer = setTimeout(() => {
-      setProgress(66);
-    }, 500);
+      setProgress(35);
+    }, 400);
     
     const timer2 = setTimeout(() => {
-      setProgress(87);
-    }, 1500);
+      setProgress(65);
+    }, 1100);
+    
+    const timer3 = setTimeout(() => {
+      setProgress(85);
+    }, 1800);
     
     return () => {
       clearTimeout(timer);
       clearTimeout(timer2);
+      clearTimeout(timer3);
     };
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center py-8 space-y-4">
+    <div className="flex flex-col items-center justify-center py-12 space-y-6">
       <div className="relative">
-        <Circle className="w-12 h-12 text-muted animate-pulse" />
-        <Circle className="w-12 h-12 text-youtube absolute top-0 left-0 animate-spin-slow opacity-75" strokeWidth={1} />
+        <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center animate-pulse">
+          <Youtube className="w-12 h-12 text-youtube" />
+        </div>
+        <div className="absolute inset-0 border-4 border-t-youtube border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
       </div>
-      <p className="text-muted-foreground animate-pulse">Processing your Shorts video...</p>
-      <div className="w-full max-w-md mt-2">
-        <Progress value={progress} className="h-2" />
-        <p className="text-xs text-muted-foreground mt-1 text-right">{progress}%</p>
+      
+      <div className="text-center space-y-4 w-full max-w-md">
+        <p className="text-lg font-medium">Finding your video...</p>
+        <Progress value={progress} className="h-3 rounded-full" />
+        <p className="text-sm text-muted-foreground">{progress < 80 ? "Analyzing video source..." : "Almost ready..."}</p>
       </div>
     </div>
   );

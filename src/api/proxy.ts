@@ -34,7 +34,15 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
         '-o', outputFile
       ]);
       
+      let stdoutData = '';
+      let stderrData = '';
+      
+      ytDlp.stdout.on('data', (data) => {
+        stdoutData += data.toString();
+      });
+      
       ytDlp.stderr.on('data', (data) => {
+        stderrData += data.toString();
         console.error(`yt-dlp stderr: ${data}`);
       });
       
@@ -42,7 +50,7 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`yt-dlp process exited with code ${code}`));
+          reject(new Error(`yt-dlp process exited with code ${code}: ${stderrData}`));
         }
       });
     });
@@ -93,33 +101,47 @@ export async function downloadVideo(
     
     if (format === 'mp3') {
       // Audio download
-      outputFile = path.join(tempDir, 'audio.mp3');
+      outputFile = path.join(tempDir, `audio-${Date.now()}.mp3`);
       ytDlpArgs = [
         '-x', 
         '--audio-format', 'mp3',
         '--audio-quality', '0',
         '--no-playlist',
+        '--embed-thumbnail',
+        '--add-metadata',
         url,
         '-o', outputFile
       ];
     } else {
       // Video download with format selection
-      outputFile = path.join(tempDir, 'video.mp4');
+      outputFile = path.join(tempDir, `video-${Date.now()}.mp4`);
       const formatString = quality === '720p' ? 'best[height<=720]' : 'best[height<=360]';
       ytDlpArgs = [
         '-f', formatString,
         '--no-playlist',
         '--merge-output-format', 'mp4',
+        '--add-metadata',
         url,
         '-o', outputFile
       ];
     }
     
+    console.log('Executing yt-dlp with args:', ytDlpArgs.join(' '));
+    
     // Use yt-dlp to download the video
     await new Promise<void>((resolve, reject) => {
       const ytDlp = spawn('yt-dlp', ytDlpArgs);
       
+      let stdoutData = '';
+      let stderrData = '';
+      
+      ytDlp.stdout.on('data', (data) => {
+        stdoutData += data.toString();
+        console.log(`yt-dlp stdout: ${data}`);
+      });
+      
       ytDlp.stderr.on('data', (data) => {
+        stderrData += data.toString();
         console.error(`yt-dlp stderr: ${data}`);
       });
       
@@ -127,19 +149,22 @@ export async function downloadVideo(
         if (code === 0) {
           resolve();
         } else {
-          reject(new Error(`yt-dlp process exited with code ${code}`));
+          reject(new Error(`yt-dlp process exited with code ${code}: ${stderrData}`));
         }
       });
     });
     
-    // Here, in a real implementation, you would:
-    // 1. Move the file to a public directory or upload to a storage service
-    // 2. Generate a temporary URL for the download
-    // 3. Set up a cleanup mechanism for the files
+    // Verify the file exists
+    await fs.access(outputFile);
     
-    // For demonstration, we'll assume the file is moved to a public URL
-    const publicUrl = `/downloads/${path.basename(outputFile)}`;
+    // In a real server implementation:
+    // 1. Move the file to a public directory
+    // 2. Generate a temporary URL for download
     
+    const fileName = path.basename(outputFile);
+    const publicUrl = `/downloads/${fileName}`;
+    
+    // Return the path relative to the downloads directory
     return publicUrl;
   } catch (error) {
     console.error('Error downloading video:', error);

@@ -9,6 +9,7 @@ import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { ShieldCheck, IndianRupee } from "lucide-react";
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -54,6 +55,13 @@ const Index = () => {
           <p className="text-sm text-slate-500">
             Download any YouTube Shorts video in high quality - <span className="bg-gradient-to-r from-red-50 to-red-100 px-1.5 py-0.5 rounded-sm font-medium">100% Free</span>
           </p>
+          <div className="flex items-center justify-center mt-2">
+            <ShieldCheck className="h-3.5 w-3.5 text-green-600 mr-1.5" />
+            <span className="text-xs text-slate-600">Trusted by millions of users</span>
+            <span className="mx-2 text-slate-300">•</span>
+            <IndianRupee className="h-3 w-3 text-orange-500 mr-1" />
+            <span className="text-xs text-slate-600">Made in India</span>
+          </div>
         </div>
         
         <AdBanner position="top" />
@@ -74,6 +82,10 @@ const Index = () => {
             </>
           ) : (
             <div className="text-center py-12 yt-card bg-white/60 backdrop-blur-sm mx-auto max-w-xl p-8 rounded-xl">
+              <div className="flex items-center justify-center mb-4">
+                <ShieldCheck className="h-5 w-5 text-green-500 mr-2" />
+                <span className="text-sm font-medium text-slate-700">Secure & Trusted Service</span>
+              </div>
               <p className="text-sm text-slate-500">
                 Paste a YouTube URL above and click Download
               </p>

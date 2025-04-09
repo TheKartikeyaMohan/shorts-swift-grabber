@@ -1,6 +1,6 @@
 
 import { Link } from "react-router-dom";
-import { BadgePercent } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
@@ -10,8 +10,8 @@ const Footer = () => {
       <div className="max-w-xl mx-auto">
         <div className="flex flex-col items-center">
           <div className="flex items-center justify-center mb-2">
-            <BadgePercent className="h-3.5 w-3.5 text-red-500 mr-1.5" />
-            <span className="text-xs text-slate-700 font-medium">Free YouTube Shorts Downloader</span>
+            <ShieldCheck className="h-3.5 w-3.5 text-green-600 mr-1.5" />
+            <span className="text-xs text-slate-700 font-medium">Trusted YouTube Shorts Downloader</span>
           </div>
           <div className="flex justify-center space-x-8 text-xs text-slate-600">
             <Link to="/privacy" className="hover:text-red-600 transition-colors font-medium">Privacy</Link>

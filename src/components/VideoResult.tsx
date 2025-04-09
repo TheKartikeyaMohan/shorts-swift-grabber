@@ -16,6 +16,7 @@ interface VideoInfo {
     label: string;
   }>;
   downloadUrl?: string;
+  directUrl?: string; // New property for direct media file URLs
   quality?: string;
   format?: string;
 }
@@ -26,7 +27,7 @@ interface VideoResultProps {
 }
 
 const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
-  const { title, thumbnail, duration, author, downloadUrl, quality, format } = videoInfo;
+  const { title, thumbnail, duration, author, downloadUrl, directUrl, quality, format } = videoInfo;
   const [downloading, setDownloading] = useState<boolean>(false);
   const [retryCount, setRetryCount] = useState<number>(0);
 
@@ -49,97 +50,68 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       
       toast.info(`Starting ${selectedFormat === "mp3" ? "audio" : "video"} download...`);
 
-      // Check if we already have a valid download URL
-      if (downloadUrl) {
-        console.log("Download URL available:", downloadUrl);
+      // Try to use directUrl first (if available), then downloadUrl
+      const downloadLink = directUrl || downloadUrl;
+      
+      // If we have a download link, try to use it
+      if (downloadLink) {
+        console.log("Download link available:", downloadLink);
         
-        // Skip HEAD check for YouTube URLs which may block HEAD requests
-        if (downloadUrl.includes('youtube.com') || downloadUrl.includes('youtu.be')) {
-          console.log("YouTube URL detected - skipping HEAD check");
-          startDownload(downloadUrl, title, format || selectedFormat);
-          toast.success("Download started!");
-          setDownloading(false);
+        // Check if it's a YouTube URL (which won't work for direct downloads)
+        if (downloadLink.includes('youtube.com') || downloadLink.includes('youtu.be')) {
+          console.log("YouTube URL detected - need to get a direct download link instead");
+          
+          // YouTube URLs can't be downloaded directly, so we need to regenerate a proper download link
+          await fetchDirectDownloadLink(storedUrl);
           return;
         }
         
         try {
-          console.log("Attempting to validate download URL:", downloadUrl);
+          console.log("Testing if URL is a direct media file:", downloadLink);
           
-          // Try fetching the download URL first to check if it's accessible
-          // Use a timeout to prevent hanging on slow responses
+          // Try fetching headers to check content type
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 5000);
           
-          const checkResponse = await fetch(downloadUrl, { 
-            method: 'HEAD',
-            signal: controller.signal
-          }).catch(err => {
-            console.log("HEAD check failed:", err.message);
-            return null;
-          });
-          
-          clearTimeout(timeoutId);
-          
-          if (checkResponse && checkResponse.ok) {
-            // URL is accessible, start download
-            console.log("URL validation passed, starting download");
-            startDownload(downloadUrl, title, format || selectedFormat);
-            toast.success("Download started!");
-            setDownloading(false);
-            return;
-          } else {
-            console.log("Download URL not accessible, will regenerate", downloadUrl);
-            // Continue to regenerate if URL is not accessible
+          try {
+            const checkResponse = await fetch(downloadLink, { 
+              method: 'HEAD',
+              signal: controller.signal
+            });
+            
+            clearTimeout(timeoutId);
+            
+            if (checkResponse && checkResponse.ok) {
+              const contentType = checkResponse.headers.get('content-type');
+              console.log("Content-Type:", contentType);
+              
+              // Check if it's a media file based on content type
+              const isMedia = contentType && (
+                contentType.includes('video/') || 
+                contentType.includes('audio/') || 
+                contentType.includes('application/octet-stream')
+              );
+              
+              if (isMedia) {
+                console.log("Direct media file detected, starting download");
+                startDownload(downloadLink, title, format || selectedFormat);
+                toast.success("Download started!");
+                setDownloading(false);
+                return;
+              } else {
+                console.log("URL is not a direct media file, content-type:", contentType);
+              }
+            }
+          } catch (error) {
+            console.log("HEAD check failed, assuming URL needs reprocessing:", error);
           }
         } catch (error) {
           console.error("Error checking download URL:", error);
-          // Continue to regenerate
         }
       }
       
-      // If we reach here, we need to regenerate the download URL
-      console.log("No valid download URL available, requesting from Edge Function");
-      
-      // Increment retry count for analytics
-      setRetryCount(prev => prev + 1);
-      
-      // Call our edge function
-      console.log("Calling edge function with parameters:", { 
-        url: storedUrl, 
-        format: selectedFormat,
-        quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p')
-      });
-      
-      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
-        body: { 
-          url: storedUrl, 
-          format: selectedFormat,
-          quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p')
-        }
-      });
-      
-      console.log("Edge function complete response:", data);
-      
-      if (error) {
-        console.error("Edge function error:", error);
-        throw new Error(error.message || "Download failed");
-      }
-      
-      if (!data) {
-        console.error("Empty response from edge function");
-        throw new Error("No data returned from server");
-      }
-      
-      if (!data.downloadUrl) {
-        console.error("Missing downloadUrl in response:", data);
-        throw new Error("No download URL provided");
-      }
-      
-      console.log("Received download URL from API:", data.downloadUrl);
-      
-      // Start the download with the URL from RapidAPI
-      startDownload(data.downloadUrl, title || data.title, data.format || selectedFormat);
-      toast.success("Download started!");
+      // If we get here, we need to regenerate the download URL
+      await fetchDirectDownloadLink(storedUrl);
       
     } catch (error) {
       console.error("Download error:", error);
@@ -156,19 +128,56 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     }
   };
 
+  const fetchDirectDownloadLink = async (youtubeUrl: string) => {
+    console.log("Regenerating direct download link for:", youtubeUrl);
+    setRetryCount(prev => prev + 1);
+    
+    // Call our edge function
+    const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
+      body: { 
+        url: youtubeUrl, 
+        format: selectedFormat,
+        quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p'),
+        getDirectLink: true  // New flag to request direct download link
+      }
+    });
+    
+    console.log("Edge function response for direct link:", data);
+    
+    if (error) {
+      console.error("Edge function error:", error);
+      throw new Error(error.message || "Download failed");
+    }
+    
+    if (!data) {
+      throw new Error("No data returned from server");
+    }
+    
+    const downloadLink = data.directUrl || data.downloadUrl;
+    
+    if (!downloadLink) {
+      throw new Error("No download link provided");
+    }
+    
+    console.log("Received download link from API:", downloadLink);
+    
+    // Start the download
+    startDownload(downloadLink, title || data.title, data.format || selectedFormat);
+    toast.success("Download started!");
+  };
+
   const startDownload = (url: string, title: string, format: string) => {
     // Log the actual URL being used for download
     console.log("Starting download with URL:", url);
     
-    // For YouTube or other streaming URLs that require browser handling
-    if (url.includes('youtube.com') || url.includes('youtu.be') || 
-        url.includes('googlevideo.com') || url.includes('stream')) {
-      console.log("Streaming URL detected - opening in new tab");
+    // For streaming URLs that require browser handling
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      console.log("YouTube URL detected - opening in new tab instead of downloading");
       window.open(url, "_blank");
       return;
     }
     
-    // For direct file downloads, try to use download attribute
+    // For direct file downloads
     try {
       const link = document.createElement("a");
       link.href = url;

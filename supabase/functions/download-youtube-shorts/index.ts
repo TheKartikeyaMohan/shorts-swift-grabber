@@ -1,4 +1,3 @@
-
 // Download YouTube Shorts Edge Function
 // This function uses RapidAPI to handle YouTube video downloads
 // and returns the download URL to the client
@@ -10,6 +9,7 @@ interface RequestBody {
   url: string;
   format: string;
   quality?: string;
+  getDirectLink?: boolean;
 }
 
 interface VideoFormats {
@@ -73,6 +73,99 @@ const extractVideoId = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
+// Helper to find the best direct download URL from formats
+const findBestDownloadUrl = (formats: any, requestedFormat: string, requestedQuality: string): string | null => {
+  console.log(`Looking for best download URL for format: ${requestedFormat}, quality: ${requestedQuality}`);
+  
+  let bestUrl: string | null = null;
+  
+  if (requestedFormat === "mp3") {
+    // For audio, look in audio formats
+    if (formats.audio && formats.audio.length > 0) {
+      console.log(`Found ${formats.audio.length} audio formats`);
+      
+      // Try to find mp3 format first
+      const mp3Format = formats.audio.find((f: any) => 
+        f.extension === "mp3" || f.mimeType?.includes("audio/mp3"));
+        
+      if (mp3Format && mp3Format.url) {
+        console.log(`Found MP3 format with URL: ${mp3Format.url.substring(0, 100)}...`);
+        bestUrl = mp3Format.url;
+      } else {
+        // Otherwise take the first audio format
+        console.log(`No MP3 found, using first audio format: ${formats.audio[0].url.substring(0, 100)}...`);
+        bestUrl = formats.audio[0].url;
+      }
+    }
+  } else {
+    // For video, look in video formats
+    if (formats.video && formats.video.length > 0) {
+      console.log(`Found ${formats.video.length} video formats`);
+      
+      // Log all available formats for debugging
+      formats.video.forEach((f: any, i: number) => {
+        console.log(`Format ${i}: Quality: ${f.quality}, Height: ${f.height}, Extension: ${f.extension}, HasURL: ${!!f.url}`);
+      });
+      
+      // First try to find the exact requested quality
+      let matchedFormat: any;
+      
+      if (requestedQuality === "720p") {
+        matchedFormat = formats.video.find((f: any) => 
+          (f.quality?.includes("720") || f.height === 720) && f.url);
+      } else if (requestedQuality === "480p") {
+        matchedFormat = formats.video.find((f: any) => 
+          (f.quality?.includes("480") || f.height === 480) && f.url);
+      } else if (requestedQuality === "360p") {
+        matchedFormat = formats.video.find((f: any) => 
+          (f.quality?.includes("360") || f.height === 360) && f.url);
+      }
+      
+      if (matchedFormat && matchedFormat.url) {
+        console.log(`Found exact quality match (${requestedQuality}): ${matchedFormat.url.substring(0, 100)}...`);
+        bestUrl = matchedFormat.url;
+      } else {
+        // If exact quality not found, get the best available
+        // Filter to only formats with URLs
+        const availableFormats = formats.video.filter((f: any) => f.url);
+        
+        if (availableFormats.length > 0) {
+          // Sort by height (quality) descending
+          availableFormats.sort((a: any, b: any) => {
+            // If height is available, use it
+            if (a.height && b.height) {
+              return b.height - a.height;
+            }
+            // Otherwise try to parse from quality string
+            const aMatch = a.quality?.match(/(\d+)p/);
+            const bMatch = b.quality?.match(/(\d+)p/);
+            
+            if (aMatch && bMatch) {
+              return parseInt(bMatch[1]) - parseInt(aMatch[1]);
+            }
+            
+            // Default to the first one
+            return 0;
+          });
+          
+          console.log(`No exact match found, using best available: ${availableFormats[0].quality}, URL: ${availableFormats[0].url.substring(0, 100)}...`);
+          bestUrl = availableFormats[0].url;
+        }
+      }
+    }
+  }
+  
+  if (!bestUrl) {
+    // Last resort - look for a direct download URL in the response root
+    if (formats.url) {
+      console.log(`No format-specific URL found, using root URL: ${formats.url.substring(0, 100)}...`);
+      bestUrl = formats.url;
+    }
+  }
+  
+  return bestUrl;
+};
+
 // Main function to handle requests
 serve(async (req) => {
   // Set up CORS headers for cross-origin requests
@@ -99,7 +192,7 @@ serve(async (req) => {
   try {
     // Parse request body
     const body: RequestBody = await req.json();
-    const { url, format } = body;
+    const { url, format, getDirectLink } = body;
     let { quality } = body;
     
     // Input validation
@@ -135,7 +228,7 @@ serve(async (req) => {
       quality = format === "mp4" ? "720p" : "high";
     }
     
-    console.log(`Processing ${format} download for: ${standardUrl}, quality: ${quality}`);
+    console.log(`Processing ${format} download for: ${standardUrl}, quality: ${quality}, getDirectLink: ${getDirectLink}`);
     
     // Get RapidAPI key from environment
     const rapidApiKey = Deno.env.get("RAPIDAPI_KEY");
@@ -213,9 +306,11 @@ serve(async (req) => {
       
       // Process formats based on requested format type
       let downloadUrl = "";
+      let directUrl = "";
       let selectedQuality = "";
       const isAudio = format === "mp3";
       
+      // Find the traditional download URL (might not be direct)
       if (isAudio) {
         // Handle audio format (mp3)
         if (data.formats.audio && data.formats.audio.length > 0) {
@@ -228,7 +323,7 @@ serve(async (req) => {
           const mp3Format = audioFormats.find((f: any) => 
             f.extension === "mp3" || f.mimeType?.includes("audio/mp3"));
             
-          if (mp3Format) {
+          if (mp3Format && mp3Format.url) {
             downloadUrl = mp3Format.url;
           }
         }
@@ -242,7 +337,7 @@ serve(async (req) => {
           const hdFormat = videoFormats.find((f: any) => 
             f.quality?.includes("720") || f.height === 720);
             
-          if (hdFormat) {
+          if (hdFormat && hdFormat.url) {
             downloadUrl = hdFormat.url;
             selectedQuality = "720p";
           }
@@ -253,7 +348,7 @@ serve(async (req) => {
           const sdFormat = videoFormats.find((f: any) => 
             f.quality?.includes("480") || f.height === 480);
             
-          if (sdFormat) {
+          if (sdFormat && sdFormat.url) {
             downloadUrl = sdFormat.url;
             selectedQuality = "480p";
           }
@@ -264,10 +359,10 @@ serve(async (req) => {
           const lowFormat = videoFormats.find((f: any) => 
             f.quality?.includes("360") || f.height === 360);
             
-          if (lowFormat) {
+          if (lowFormat && lowFormat.url) {
             downloadUrl = lowFormat.url;
             selectedQuality = "360p";
-          } else if (videoFormats.length > 0) {
+          } else if (videoFormats.length > 0 && videoFormats[0].url) {
             // Last resort: use the first available video format
             downloadUrl = videoFormats[0].url;
             selectedQuality = videoFormats[0].quality || "unknown";
@@ -275,8 +370,44 @@ serve(async (req) => {
         }
       }
 
-      // Verify we have a download URL
-      if (!downloadUrl) {
+      // Check for direct download URL
+      // This is the key addition that tries to find direct download links for files
+      directUrl = findBestDownloadUrl(data.formats, format, quality) || "";
+      
+      // If we're specifically requesting a direct download link and couldn't find one,
+      // try to use alternate endpoints or fallbacks from the API response
+      if (getDirectLink && !directUrl) {
+        // Look for a "url" field at the top level of the response
+        if (data.url) {
+          console.log(`Using top-level URL as direct URL: ${data.url.substring(0, 100)}...`);
+          directUrl = data.url;
+        }
+        
+        // Check if there are download links in other structures
+        if (data.download_links && Array.isArray(data.download_links)) {
+          console.log(`Found ${data.download_links.length} download links`);
+          
+          // Find a suitable download link based on format
+          const matchingLink = data.download_links.find((link: any) => {
+            if (isAudio) {
+              return link.type === "audio" || link.format === "mp3";
+            } else {
+              return link.type === "video" || link.format === "mp4";
+            }
+          });
+          
+          if (matchingLink && matchingLink.url) {
+            console.log(`Found matching download link: ${matchingLink.url.substring(0, 100)}...`);
+            directUrl = matchingLink.url;
+          } else if (data.download_links.length > 0 && data.download_links[0].url) {
+            console.log(`Using first download link: ${data.download_links[0].url.substring(0, 100)}...`);
+            directUrl = data.download_links[0].url;
+          }
+        }
+      }
+
+      // Verify we have at least one URL
+      if (!downloadUrl && !directUrl) {
         console.error(`No ${format} URL found in formats:`, data.formats);
         
         await logToSupabase({
@@ -293,56 +424,38 @@ serve(async (req) => {
         );
       }
 
-      // Check if the URL is directly accessible with a simple HEAD request
-      try {
-        console.log(`Verifying download URL: ${downloadUrl.substring(0, 100)}...`);
-        
-        // For YouTube URLs, we'll skip this check as YouTube blocks HEAD requests
-        if (!downloadUrl.includes('youtube.com') && !downloadUrl.includes('youtu.be')) {
-          const urlCheckResponse = await fetch(downloadUrl, { 
-            method: 'HEAD',
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-            }
-          });
-          
-          if (!urlCheckResponse.ok) {
-            console.warn(`Download URL check failed with status: ${urlCheckResponse.status}`);
-          } else {
-            console.log("Download URL is accessible");
-          }
-        } else {
-          console.log("Skipping HEAD check for YouTube URL");
-        }
-      } catch (error) {
-        console.warn(`Error verifying download URL: ${error.message}`);
-      }
-
-      // Prepare success response with REAL download URL from RapidAPI
+      // Prepare success response with download URLs
       const result = {
         title: data.title || "YouTube Video",
         thumbnail: data.thumbnail || "",
         duration: data.duration || "",
         author: data.author || "",
-        downloadUrl, // This is the real download URL from RapidAPI
+        downloadUrl: downloadUrl || directUrl, // Fallback to directUrl if downloadUrl is empty
+        directUrl: directUrl, // Explicitly provide the direct URL separately
         quality: selectedQuality,
         format,
         isAudio,
       };
 
-      console.log("Successful response with download URL length:", downloadUrl.length);
+      console.log("Successful response with URLs:");
+      console.log("- downloadUrl length:", (downloadUrl || "").length);
+      console.log("- directUrl length:", (directUrl || "").length);
+      
+      // For debugging only - don't log full URLs in production
+      if (downloadUrl) console.log("- downloadUrl sample:", downloadUrl.substring(0, 50) + "...");
+      if (directUrl) console.log("- directUrl sample:", directUrl.substring(0, 50) + "...");
 
       // Log successful download to Supabase
       await logToSupabase({
         video_url: standardUrl,
-        download_url: downloadUrl.substring(0, 100) + "...", // Only log part of URL for privacy
+        download_url: (directUrl || downloadUrl).substring(0, 100) + "...", // Only log part of URL for privacy
         status: "success",
         format,
         quality: selectedQuality,
         ip_address: clientIP,
       });
 
-      // Return successful response with the real download URL
+      // Return successful response with the URLs
       return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
     } catch (apiError) {
       console.error("API request error:", apiError);

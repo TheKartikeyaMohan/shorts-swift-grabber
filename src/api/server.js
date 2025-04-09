@@ -114,11 +114,22 @@ app.post('/api/download', async (req, res) => {
       command = `yt-dlp -f ${formatString} --no-playlist --merge-output-format mp4 "${url}" -o "${outputPath}"`;
     }
     
+    console.log(`Executing command: ${command}`);
+    
     // Execute download command
     exec(command, (error, stdout, stderr) => {
       if (error) {
         console.error(`Error downloading: ${error.message}`);
-        return res.status(500).json({ error: 'Download failed' });
+        console.error(`stderr: ${stderr}`);
+        return res.status(500).json({ error: 'Download failed', details: stderr });
+      }
+      
+      console.log(`Download successful: ${outputPath}`);
+      
+      // Check if file exists
+      if (!fs.existsSync(outputPath)) {
+        console.error(`File not created: ${outputPath}`);
+        return res.status(500).json({ error: 'File not created' });
       }
       
       // Return the download URL
@@ -142,7 +153,13 @@ app.post('/api/download', async (req, res) => {
   }
 });
 
+// Route to check if server is running
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'API server is running' });
+});
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+  console.log(`Downloads directory: ${downloadsDir}`);
 });

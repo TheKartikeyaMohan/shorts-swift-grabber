@@ -12,13 +12,20 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy package.json and package-lock.json
-COPY package*.json ./
+COPY backend-package.json ./package.json
+COPY package-lock.json ./package-lock.json
 
-# Install dependencies
+# Install backend dependencies
 RUN npm install
 
+# Create necessary directories
+RUN mkdir -p src/api/public/downloads
+
 # Copy source code
-COPY . .
+COPY src/api ./src/api
+
+# Make public directory accessible
+RUN chmod 777 src/api/public/downloads
 
 # Expose port
 EXPOSE 3001

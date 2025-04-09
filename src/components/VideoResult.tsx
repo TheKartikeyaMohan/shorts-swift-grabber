@@ -2,13 +2,18 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Check } from "lucide-react";
+import { Check, ShieldCheck } from "lucide-react";
 
 interface VideoInfo {
   title: string;
   thumbnail: string;
   duration?: string;
   author?: string;
+  formats?: Array<{
+    quality: string;
+    format: string;
+    label: string;
+  }>;
 }
 
 interface VideoResultProps {
@@ -20,24 +25,56 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   const [selectedFormat, setSelectedFormat] = useState<string>("720p");
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  const downloadOptions = [
+  // Use formats from backend or fallback to default options
+  const downloadOptions = videoInfo.formats || [
     { label: "HD", quality: "720p", format: "mp4" },
     { label: "SD", quality: "360p", format: "mp4" },
     { label: "Audio", quality: "128kbps", format: "mp3" },
   ];
 
-  const handleDownload = (quality: string, format: string) => {
+  const handleDownload = async (quality: string, format: string) => {
     setDownloading(`${format}-${quality}`);
     
-    // Simulate download success after 2 seconds
-    setTimeout(() => {
-      toast.success(`Download started`);
-      setDownloading(null);
+    try {
+      const response = await fetch("/api/download", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: localStorage.getItem("lastYoutubeUrl") || "",
+          format,
+          quality,
+        }),
+      });
       
-      // Simulate opening a download link
-      const dummyDownloadUrl = `/download?format=${format}&quality=${quality}&t=${Date.now()}`;
-      window.open(dummyDownloadUrl, "_blank");
-    }, 2000);
+      if (!response.ok) {
+        throw new Error("Download failed");
+      }
+      
+      const data = await response.json();
+      
+      // Create a hidden link and click it to start the download
+      if (data.downloadUrl) {
+        const link = document.createElement("a");
+        link.href = data.downloadUrl;
+        link.download = `${title}.${format}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast.success("Download started");
+      } else {
+        throw new Error("No download URL provided");
+      }
+    } catch (error) {
+      console.error("Download error:", error);
+      toast.error("Download failed");
+    } finally {
+      setDownloading(null);
+    }
   };
 
   return (
@@ -53,6 +90,10 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
             {duration}
           </div>
         )}
+        <div className="absolute top-2 left-2 flex items-center bg-green-100/90 text-green-800 px-2 py-0.5 text-xs rounded">
+          <ShieldCheck className="h-3 w-3 mr-1" />
+          <span>Verified</span>
+        </div>
       </div>
       
       <div className="p-5 space-y-4">

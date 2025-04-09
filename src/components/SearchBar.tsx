@@ -28,6 +28,9 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
       return;
     }
     
+    // Store the URL in localStorage for later use
+    localStorage.setItem("lastYoutubeUrl", url);
+    
     onSearch(url);
   };
 

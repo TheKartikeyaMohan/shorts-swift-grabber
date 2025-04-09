@@ -20,23 +20,23 @@ const Index = () => {
     setVideoInfo(null);
     
     try {
-      // Simulate API call with setTimeout
-      // In production, this would be a real fetch to your backend
-      setTimeout(() => {
-        // Mock data for demonstration
-        const mockVideoInfo = {
-          title: "YouTube Shorts Video #shorts",
-          thumbnail: "https://picsum.photos/seed/shorts/640/360", // Random placeholder image
-          duration: "0:58",
-          author: "Creator",
-        };
-        
-        setVideoInfo(mockVideoInfo);
-        setIsLoading(false);
-        
-        // Success toast
-        toast.success("Video found");
-      }, 3000);
+      // Make a request to our backend API
+      const response = await fetch("/api/video-info", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      });
+      
+      if (!response.ok) {
+        throw new Error("Failed to fetch video info");
+      }
+      
+      const data = await response.json();
+      setVideoInfo(data);
+      setIsLoading(false);
+      toast.success("Video found");
     } catch (error) {
       console.error("Error fetching video:", error);
       setIsLoading(false);
@@ -55,10 +55,10 @@ const Index = () => {
           <p className="text-sm text-slate-500">
             Download any YouTube Shorts video in high quality - <span className="bg-gradient-to-r from-red-50 to-red-100 px-1.5 py-0.5 rounded-sm font-medium">100% Free</span>
           </p>
-          <div className="flex items-center justify-center mt-2">
+          <div className="flex items-center justify-center mt-4">
             <ShieldCheck className="h-3.5 w-3.5 text-green-600 mr-1.5" />
             <span className="text-xs text-slate-600">Trusted by millions of users</span>
-            <span className="mx-2 text-slate-300">•</span>
+            <span className="mx-3 text-slate-300">•</span>
             <IndianRupee className="h-3 w-3 text-orange-500 mr-1" />
             <span className="text-xs text-slate-600">Made in India</span>
           </div>

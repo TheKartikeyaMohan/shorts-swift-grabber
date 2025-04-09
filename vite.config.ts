@@ -17,7 +17,9 @@ export default defineConfig(({ mode }) => ({
         timeout: 5000,
         onError: (err: Error, req: Request, res: Response) => {
           console.error(`Proxy error:`, err);
-          res.statusCode = 500;
+          // Fix: Response doesn't have statusCode property
+          // @ts-ignore - Response interface might not match exactly
+          res.status = 500;
           // @ts-ignore - Response interface might not match exactly
           res.end(JSON.stringify({ 
             error: "Backend server connection failed",

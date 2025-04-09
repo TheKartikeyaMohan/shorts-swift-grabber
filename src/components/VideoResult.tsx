@@ -1,8 +1,8 @@
-
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Check, ShieldCheck, Download } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoInfo {
   title: string;
@@ -14,6 +14,7 @@ interface VideoInfo {
     format: string;
     label: string;
   }>;
+  downloadUrl?: string;
 }
 
 interface VideoResultProps {
@@ -21,7 +22,7 @@ interface VideoResultProps {
 }
 
 const VideoResult = ({ videoInfo }: VideoResultProps) => {
-  const { title, thumbnail, duration, author } = videoInfo;
+  const { title, thumbnail, duration, author, downloadUrl } = videoInfo;
   const [selectedFormat, setSelectedFormat] = useState<string>("720p");
   const [downloading, setDownloading] = useState<string | null>(null);
 
@@ -44,58 +45,32 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
         return;
       }
       
-      toast.info("Preparing your download...");
-      
-      // Make the download request to the backend API
-      const response = await fetch("/api/download", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          url: storedUrl,
-          format,
-          quality,
-        }),
-      });
-      
-      if (!response.ok) {
-        let errorMessage = "Download failed";
-        try {
-          const errorData = await response.json();
-          console.error("Download error details:", errorData);
-          errorMessage = errorData.error || "Download failed";
-        } catch (e) {
-          console.error("Error parsing error response:", e);
-        }
-        throw new Error(errorMessage);
+      toast.info("Starting download...");
+
+      // Direct download if we already have the URL
+      if (downloadUrl) {
+        startDownload(downloadUrl, title, format);
+        toast.success("Download started!");
+        return;
       }
       
-      const data = await response.json();
+      // Otherwise call our edge function
+      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
+        body: { url: storedUrl, format, quality }
+      });
       
-      // Check if we have a valid download URL
-      if (!data.downloadUrl) {
+      if (error) {
+        console.error("Edge function error:", error);
+        throw new Error(error.message || "Download failed");
+      }
+      
+      if (!data || !data.downloadUrl) {
         throw new Error("No download URL provided");
       }
       
-      // Create a hidden link and click it to start the download
-      const link = document.createElement("a");
-      link.href = data.downloadUrl;
-      link.download = `${title || 'youtube_video'}.${format}`;
-      
-      // Important: When using the proxy, make sure the URL is correct
-      if (!link.href.startsWith('http')) {
-        const baseUrl = window.location.origin;
-        link.href = `${baseUrl}${data.downloadUrl}`;
-      }
-      
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      toast.success("Download started");
+      // Start the download
+      startDownload(data.downloadUrl, title, format);
+      toast.success("Download started!");
       
     } catch (error) {
       console.error("Download error:", error);
@@ -103,6 +78,18 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
     } finally {
       setDownloading(null);
     }
+  };
+
+  const startDownload = (url: string, title: string, format: string) => {
+    // Create a hidden link and click it to start the download
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${title || 'youtube_video'}.${format}`;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (

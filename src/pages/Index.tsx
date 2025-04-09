@@ -10,12 +10,14 @@ import { Toaster } from "sonner";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ShieldCheck, IndianRupee } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoInfo {
   title: string;
   thumbnail: string;
   duration?: string;
   author?: string;
+  downloadUrl?: string;
   formats?: Array<{
     quality: string;
     format: string;
@@ -35,32 +37,38 @@ const Index = () => {
     try {
       toast.info("Searching for video...");
       
-      // Make a request to the backend API
-      const response = await fetch("/api/video-info", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url }),
+      // Call our Supabase Edge Function
+      const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
+        body: { url }
       });
       
-      if (!response.ok) {
-        let errorMessage = "Failed to fetch video info";
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (e) {
-          console.error("Error parsing error response:", e);
-        }
-        throw new Error(errorMessage);
+      if (error) {
+        console.error("Edge function error:", error);
+        throw new Error(error.message || "Failed to fetch video info");
       }
       
-      const data = await response.json();
+      if (!data) {
+        throw new Error("No data returned from API");
+      }
       
       // Store the URL in localStorage for the download function
       localStorage.setItem("lastYoutubeUrl", url);
       
-      setVideoInfo(data);
+      // Prepare video info from the response
+      const videoData: VideoInfo = {
+        title: data.title || "YouTube Video",
+        thumbnail: data.thumbnail || "",
+        duration: data.duration || "",
+        author: data.author || "",
+        downloadUrl: data.downloadUrl,
+        formats: [
+          { label: "HD", quality: "720p", format: "mp4" },
+          { label: "SD", quality: "360p", format: "mp4" },
+          { label: "Audio", quality: "128kbps", format: "mp3" },
+        ]
+      };
+      
+      setVideoInfo(videoData);
       toast.success("Video found!");
     } catch (error) {
       console.error("Error fetching video:", error);

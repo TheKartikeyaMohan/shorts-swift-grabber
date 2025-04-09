@@ -38,6 +38,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
   const [retryCount, setRetryCount] = useState<number>(0);
   const [isTestingUrl, setIsTestingUrl] = useState<boolean>(false);
   const [isDirectDownload, setIsDirectDownload] = useState<boolean | null>(null);
+  const [contentType, setContentType] = useState<string | null>(null);
 
   // Check if the URL is a direct download when component mounts or URLs change
   useEffect(() => {
@@ -69,29 +70,33 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         clearTimeout(timeoutId);
         
         if (response && response.ok) {
-          const contentType = response.headers.get('content-type');
-          console.log("Content-Type:", contentType);
+          const contentTypeHeader = response.headers.get('content-type');
+          console.log("Content-Type:", contentTypeHeader);
+          setContentType(contentTypeHeader);
           
-          // Check if it's a media file based on content type
-          const isMedia = contentType && (
-            contentType.includes('video/') || 
-            contentType.includes('audio/') || 
-            contentType.includes('application/octet-stream') ||
-            // Additional common media MIME types
-            contentType.includes('video/mp4') ||
-            contentType.includes('audio/mpeg') ||
-            contentType.includes('audio/mp3')
+          // Detect if it's a media file based on content type
+          const isMedia = contentTypeHeader && (
+            contentTypeHeader.includes('video/') || 
+            contentTypeHeader.includes('audio/') || 
+            contentTypeHeader.includes('application/octet-stream') ||
+            contentTypeHeader.includes('video/mp4') ||
+            contentTypeHeader.includes('audio/mpeg') ||
+            contentTypeHeader.includes('audio/mp3')
           );
           
-          setIsDirectDownload(isMedia);
+          // Also check if the URL has a media file extension
+          const hasMediaExtension = linkToTest.match(/\.(mp4|webm|mp3|m4a|ogg|wav)(\?|$)/i);
+          
+          setIsDirectDownload(isMedia || !!hasMediaExtension);
+          console.log("Is direct media file:", isMedia || !!hasMediaExtension);
+          console.log("Media extension detected:", !!hasMediaExtension);
         } else {
-          console.log("URL is not accessible or not a direct media file");
+          console.log("URL is not accessible or returns an error");
           setIsDirectDownload(false);
         }
       } catch (error) {
         console.log("Error testing URL:", error);
-        // Some servers block HEAD requests but might allow GET
-        // Let's try to download it directly anyway
+        // If HEAD request fails, we'll try a GET request during download
         setIsDirectDownload(true);
       } finally {
         setIsTestingUrl(false);
@@ -127,89 +132,16 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
           console.log("YouTube URL detected - need to get a direct download link instead");
           
           // YouTube URLs can't be downloaded directly, so we need to regenerate a proper download link
-          await fetchDirectDownloadLink(storedUrl);
+          await fetchDirectDownloadLink(storedUrl, true);
           return;
         }
         
-        // Implement the blob download method as suggested
-        try {
-          console.log("Fetching media file as blob for direct download");
-          
-          // Show a progress toast that we're preparing the download
-          const toastId = toast.loading("Preparing download...");
-          
-          // Fetch the file as a blob
-          const fileResponse = await fetch(downloadLink, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-          });
-          
-          if (!fileResponse.ok) {
-            toast.dismiss(toastId);
-            console.error(`Error fetching file: ${fileResponse.status}`);
-            toast.error("Could not download file. Trying alternative method...");
-            await fetchDirectDownloadLink(storedUrl);
-            return;
-          }
-          
-          // Get content type to determine file extension
-          const contentType = fileResponse.headers.get('content-type') || '';
-          console.log("Content-Type of download:", contentType);
-          
-          // Determine file extension based on content type or format
-          let fileExtension = format || selectedFormat || 'mp4';
-          if (contentType.includes('audio/mp3') || contentType.includes('audio/mpeg')) {
-            fileExtension = 'mp3';
-          } else if (contentType.includes('video/mp4')) {
-            fileExtension = 'mp4';
-          } else if (contentType.includes('video/webm')) {
-            fileExtension = 'webm';
-          }
-          
-          // Convert response to blob
-          const blob = await fileResponse.blob();
-          
-          // Create a blob URL 
-          const blobUrl = URL.createObjectURL(blob);
-          
-          // Create download element
-          const a = document.createElement("a");
-          a.href = blobUrl;
-          a.download = `${title || 'youtube_video'}.${fileExtension}`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          
-          // Clean up the blob URL
-          URL.revokeObjectURL(blobUrl);
-          
-          toast.dismiss(toastId);
-          toast.success("Download started!");
-          
-          console.log("Download initiated successfully using blob method");
-          
-        } catch (blobError) {
-          console.error("Error with blob download:", blobError);
-          
-          // Fallback to the old method
-          console.log("Falling back to legacy download method");
-          toast.info("Trying alternative download method...");
-          
-          // Create a direct link
-          const link = document.createElement("a");
-          link.href = downloadLink;
-          link.download = `${title || 'youtube_video'}.${format || selectedFormat}`;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          toast.success("Download started!");
-        }
+        // Use blob download method for all files
+        await downloadWithBlob(downloadLink);
       } else {
         // No download link available, need to fetch one
         console.log("No download link available, fetching from API");
-        await fetchDirectDownloadLink(storedUrl);
+        await fetchDirectDownloadLink(storedUrl, true);
       }
       
     } catch (error) {
@@ -217,17 +149,116 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       toast.error(error instanceof Error ? error.message : "Download failed");
       
       // Fallback - open YouTube URL directly if all else fails
-      const storedUrl = localStorage.getItem("lastYoutubeUrl");
-      if (storedUrl && retryCount > 1) {
-        toast.info("Opening original YouTube video as fallback...");
-        window.open(storedUrl, "_blank");
+      if (retryCount > 1) {
+        const storedUrl = localStorage.getItem("lastYoutubeUrl");
+        if (storedUrl) {
+          toast.info("Opening original YouTube video as fallback...");
+          window.open(storedUrl, "_blank");
+        }
       }
     } finally {
       setDownloading(false);
     }
   };
 
-  const fetchDirectDownloadLink = async (youtubeUrl: string) => {
+  const downloadWithBlob = async (url: string) => {
+    console.log("Starting blob download for:", url);
+    const toastId = toast.loading("Preparing download...");
+    
+    try {
+      // Add random query parameter to bypass cache
+      const urlWithCache = `${url}${url.includes('?') ? '&' : '?'}_t=${Date.now()}`;
+      
+      // Fetch with explicit headers to help with CORS and content type detection
+      const response = await fetch(urlWithCache, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          'Accept': 'video/*, audio/*, application/octet-stream'
+        }
+      });
+      
+      if (!response.ok) {
+        toast.dismiss(toastId);
+        console.error(`Error fetching file: ${response.status} ${response.statusText}`);
+        console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+        throw new Error(`Failed to download: ${response.statusText}`);
+      }
+      
+      // Get content type to determine file extension
+      const contentType = response.headers.get('content-type') || '';
+      console.log("Content-Type of download:", contentType);
+      
+      // Check for redirects or non-media content types
+      const finalUrl = response.url;
+      console.log("Final URL after redirects:", finalUrl);
+      
+      if (finalUrl.includes('youtube.com') || finalUrl.includes('youtu.be')) {
+        toast.dismiss(toastId);
+        toast.error("URL redirected to YouTube. Cannot download directly.");
+        throw new Error("Redirected to YouTube");
+      }
+      
+      const isMediaContentType = contentType.includes('video/') || 
+                               contentType.includes('audio/') || 
+                               contentType.includes('application/octet-stream');
+                               
+      if (!isMediaContentType) {
+        console.warn("Non-media content type detected:", contentType);
+        // We'll still try to download, but log the warning
+      }
+      
+      // Determine file extension based on content type or format
+      let fileExtension = format || selectedFormat || 'mp4';
+      if (contentType.includes('audio/mp3') || contentType.includes('audio/mpeg')) {
+        fileExtension = 'mp3';
+      } else if (contentType.includes('video/mp4')) {
+        fileExtension = 'mp4';
+      } else if (contentType.includes('video/webm')) {
+        fileExtension = 'webm';
+      } else if (contentType.includes('audio/m4a')) {
+        fileExtension = 'm4a';
+      }
+      
+      // Convert response to blob
+      const blob = await response.blob();
+      
+      // Check if blob is empty or too small
+      if (blob.size < 1000) {
+        toast.dismiss(toastId);
+        console.error("Downloaded file is too small:", blob.size, "bytes");
+        throw new Error("Downloaded file is too small or empty");
+      }
+      
+      // Create a blob URL 
+      const blobUrl = URL.createObjectURL(blob);
+      
+      // Create download element
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = `${title || 'youtube_video'}.${fileExtension}`;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      
+      // Clean up
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 100);
+      
+      toast.dismiss(toastId);
+      toast.success("Download started!");
+      
+      console.log("Download initiated successfully using blob method");
+      
+    } catch (blobError) {
+      toast.dismiss(toastId);
+      console.error("Error with blob download:", blobError);
+      throw blobError;
+    }
+  };
+
+  const fetchDirectDownloadLink = async (youtubeUrl: string, forceNewLink: boolean = false) => {
     console.log("Regenerating direct download link for:", youtubeUrl);
     setRetryCount(prev => prev + 1);
     
@@ -235,13 +266,13 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     const toastId = toast.loading("Fetching direct download link...");
     
     try {
-      // Call our edge function
+      // Call our edge function with explicit request for direct link
       const { data, error } = await supabase.functions.invoke('download-youtube-shorts', {
         body: { 
           url: youtubeUrl, 
           format: selectedFormat,
           quality: quality || (selectedFormat === 'mp3' ? 'high' : '720p'),
-          getDirectLink: true  // Request direct download link
+          getDirectLink: true
         }
       });
       
@@ -260,6 +291,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         return;
       }
       
+      // Get direct download link from response
       const downloadLink = data.directUrl || data.downloadUrl;
       
       if (!downloadLink) {
@@ -270,85 +302,28 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       
       console.log("Received download link from API:", downloadLink);
       
-      // Implement blob download for the fresh link
-      try {
-        // Fetch the file as a blob
-        const fileResponse = await fetch(downloadLink, {
-          headers: { 'User-Agent': 'Mozilla/5.0' }
-        });
-        
-        if (!fileResponse.ok) {
-          console.error(`Error fetching file: ${fileResponse.status}`);
-          toast.dismiss(toastId);
-          toast.error("Could not download file directly");
-          
-          // Try opening it in a new tab as last resort
-          window.open(downloadLink, "_blank");
-          return;
-        }
-        
-        // Get content type to determine file extension
-        const contentType = fileResponse.headers.get('content-type') || '';
-        console.log("Content-Type of download:", contentType);
-        
-        // Determine file extension based on content type or format
-        let fileExtension = data.format || selectedFormat || 'mp4';
-        if (contentType.includes('audio/mp3') || contentType.includes('audio/mpeg')) {
-          fileExtension = 'mp3';
-        } else if (contentType.includes('video/mp4')) {
-          fileExtension = 'mp4';
-        } else if (contentType.includes('video/webm')) {
-          fileExtension = 'webm';
-        }
-        
-        // Convert response to blob
-        const blob = await fileResponse.blob();
-        
-        // Create a blob URL
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // Create download element
-        const a = document.createElement("a");
-        a.href = blobUrl;
-        a.download = `${data.title || title || 'youtube_video'}.${fileExtension}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Clean up the blob URL
-        URL.revokeObjectURL(blobUrl);
-        
+      // Validate if it's a YouTube link
+      if (downloadLink.includes('youtube.com') || downloadLink.includes('youtu.be')) {
         toast.dismiss(toastId);
-        toast.success("Download started!");
-        
-      } catch (blobError) {
-        console.error("Error with blob download:", blobError);
-        toast.dismiss(toastId);
-        
-        // Fallback to direct link
-        try {
-          // Create a direct link
-          const link = document.createElement("a");
-          link.href = downloadLink;
-          link.download = `${data.title || title || 'youtube_video'}.${data.format || selectedFormat}`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          toast.success("Download started!");
-        } catch (directError) {
-          console.error("Error with direct link:", directError);
-          toast.error("Download failed. Opening link in new tab instead.");
-          window.open(downloadLink, "_blank");
-        }
+        toast.error("Received a YouTube link instead of a direct download link");
+        throw new Error("Received YouTube link instead of direct download");
       }
+      
+      // Try to download with the new link
+      toast.dismiss(toastId);
+      await downloadWithBlob(downloadLink);
+      
     } catch (error) {
       console.error("Error fetching direct download link:", error);
       toast.dismiss(toastId);
-      toast.error("Failed to get direct download link");
       
-      // Open original YouTube URL as last resort
-      window.open(youtubeUrl, "_blank");
+      if (retryCount < 2 && !forceNewLink) {
+        toast.info("Retrying with new provider...");
+        setTimeout(() => fetchDirectDownloadLink(youtubeUrl, true), 1000);
+      } else {
+        toast.error("Failed to get direct download link");
+        throw error;
+      }
     }
   };
 
@@ -431,6 +406,16 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
                 >
                   Open in YouTube
                 </DropdownMenuItem>
+                {(directUrl || downloadUrl) && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const link = directUrl || downloadUrl;
+                      if (link) window.open(link, "_blank");
+                    }}
+                  >
+                    Debug: Open Media URL
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -438,6 +423,12 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
           {isDirectDownload === false && (
             <div className="text-xs text-amber-600 text-center pt-1">
               Direct download not available. Video may open in browser instead.
+            </div>
+          )}
+          
+          {contentType && (
+            <div className="text-xs text-gray-500 text-center">
+              <span className="font-medium">Debug:</span> {contentType}
             </div>
           )}
         </div>

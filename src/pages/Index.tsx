@@ -9,74 +9,56 @@ import Footer from "@/components/Footer";
 import { Toaster } from "sonner";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { ShieldCheck, IndianRupee, AlertCircle } from "lucide-react";
-import { fetchVideoInfo } from "@/services/mockYoutubeService";
+import { ShieldCheck, IndianRupee } from "lucide-react";
+
+interface VideoInfo {
+  title: string;
+  thumbnail: string;
+  duration?: string;
+  author?: string;
+  formats?: Array<{
+    quality: string;
+    format: string;
+    label: string;
+  }>;
+}
 
 const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
-  const [videoInfo, setVideoInfo] = useState<any>(null);
-  const [backendError, setBackendError] = useState<string | null>(null);
-  const [isUsingMockApi, setIsUsingMockApi] = useState(false);
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const isMobile = useIsMobile();
 
   const handleSearch = async (url: string) => {
     setIsLoading(true);
     setVideoInfo(null);
-    setBackendError(null);
     
     try {
       toast.info("Searching for video...");
       
-      let data;
+      // Make a request to the backend API
+      const response = await fetch("/api/video-info", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      });
       
-      // Check if backend is available
-      try {
-        const healthCheck = await fetch("/api/health", { 
-          method: "GET",
-          headers: { "Content-Type": "application/json" },
-          // Add a timeout to fail faster if backend is not responding
-          signal: AbortSignal.timeout(3000)
-        });
-        
-        if (!healthCheck.ok) {
-          throw new Error("Backend server is not available");
+      if (!response.ok) {
+        let errorMessage = "Failed to fetch video info";
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          console.error("Error parsing error response:", e);
         }
-        
-        console.log("Backend health check passed");
-        
-        // Make a request to our backend API
-        const response = await fetch("/api/video-info", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ url }),
-        });
-        
-        if (!response.ok) {
-          let errorMessage = "Failed to fetch video info";
-          try {
-            const errorData = await response.json();
-            errorMessage = errorData.error || errorMessage;
-          } catch (e) {
-            console.error("Error parsing error response:", e);
-          }
-          throw new Error(errorMessage);
-        }
-        
-        data = await response.json();
-        setIsUsingMockApi(false);
-        
-      } catch (error) {
-        console.error("Backend health check failed:", error);
-        setBackendError("Cannot connect to the download server. Please make sure it's running.");
-        
-        // Fall back to mock data for demonstration
-        data = await fetchVideoInfo(url);
-        setIsUsingMockApi(true);
-        
-        console.log("Using mock data:", data);
+        throw new Error(errorMessage);
       }
+      
+      const data = await response.json();
+      
+      // Store the URL in localStorage for the download function
+      localStorage.setItem("lastYoutubeUrl", url);
       
       setVideoInfo(data);
       toast.success("Video found!");
@@ -114,21 +96,6 @@ const Index = () => {
           <SearchBar onSearch={handleSearch} isLoading={isLoading} />
         </div>
         
-        {backendError && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 flex items-center">
-            <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-            <div>
-              <p className="font-medium">Backend Connection Error</p>
-              <p className="text-sm mt-1">{backendError}</p>
-              {isUsingMockApi && (
-                <p className="text-sm mt-1 font-medium text-amber-600">
-                  Using demo mode with sample data
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-        
         <div className={`${isMobile ? 'my-10' : 'my-8'}`}>
           {isLoading ? (
             <LoadingState />
@@ -136,7 +103,7 @@ const Index = () => {
             <>
               <AdBanner position="middle" />
               <div className={`${isMobile ? 'mt-8' : 'mt-6'}`}>
-                <VideoResult videoInfo={videoInfo} isUsingMockApi={isUsingMockApi} />
+                <VideoResult videoInfo={videoInfo} />
               </div>
             </>
           ) : (

@@ -156,8 +156,8 @@ serve(async (req) => {
       );
     }
 
-    // Make request to RapidAPI
-    const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/download";
+    // Make request to RapidAPI - UPDATED ENDPOINT
+    const apiUrl = "https://youtube-video-and-shorts-downloader.p.rapidapi.com/links";
     
     try {
       const apiResponse = await fetch(apiUrl, {
@@ -191,6 +191,7 @@ serve(async (req) => {
 
       // Parse API response
       const data = await apiResponse.json();
+      console.log("API Response:", JSON.stringify(data, null, 2));
       
       if (!data || !data.formats) {
         console.error("Invalid API response:", data);

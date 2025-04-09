@@ -93,6 +93,8 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         throw new Error("No download URL provided");
       }
       
+      console.log("Received download URL from API:", data.downloadUrl);
+      
       // Start the download with the real URL from RapidAPI
       startDownload(data.downloadUrl, title, data.format || selectedFormat);
       toast.success("Download started!");

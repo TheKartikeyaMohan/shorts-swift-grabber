@@ -177,8 +177,12 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         headers: {
           'User-Agent': 'Mozilla/5.0',
           'Accept': 'video/*, audio/*, application/octet-stream',
-          'Cache-Control': 'no-cache'
-        }
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        },
+        mode: 'cors',
+        cache: 'no-cache',
+        credentials: 'omit'
       });
       
       console.log("Response status:", response.status);

@@ -16,7 +16,7 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 function extractVideoId(url: string): string | null {
   // Match YouTube Shorts URLs
-  const regex = /(?:youtube\.com\/shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+  const regex = /(?:youtube\.com\/(?:shorts\/|watch\?v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
@@ -54,20 +54,17 @@ serve(async (req: Request) => {
     // Get client IP for logging
     const clientIp = req.headers.get("x-forwarded-for") || "unknown";
     
-    // Build the RapidAPI endpoint based on format
-    const baseUrl = "https://youtube-mp3-audio-video-downloader.p.rapidapi.com";
-    const endpoint = format === "mp3" 
-      ? `/get_mp3_download_link/${videoId}`
-      : `/get_video_download_link/${videoId}`;
-      
-    console.log(`Calling RapidAPI endpoint: ${baseUrl}${endpoint}`);
+    // Build the RapidAPI endpoint
+    const apiUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`;
+    
+    console.log(`Calling RapidAPI endpoint: ${apiUrl}`);
     
     // Call the RapidAPI endpoint
-    const rapidApiResponse = await fetch(`${baseUrl}${endpoint}`, {
+    const rapidApiResponse = await fetch(apiUrl, {
       method: "GET",
       headers: {
         "X-RapidAPI-Key": RAPIDAPI_KEY,
-        "X-RapidAPI-Host": "youtube-mp3-audio-video-downloader.p.rapidapi.com"
+        "X-RapidAPI-Host": "youtube-video-and-shorts-downloader.p.rapidapi.com"
       }
     });
 
@@ -81,10 +78,44 @@ serve(async (req: Request) => {
     
     // Extract download link from the response based on format
     let downloadUrl;
+    let selectedFormat;
+    
     if (format === "mp3") {
-      downloadUrl = data?.download_link || null;
+      // Find audio formats
+      const audioFormats = data.formats.filter((f: any) => 
+        (f.ext === "mp3" || f.ext === "m4a") && f.url
+      );
+      
+      if (audioFormats.length > 0) {
+        // Sort by filesize (higher quality first) if available
+        if (audioFormats[0].filesize) {
+          audioFormats.sort((a: any, b: any) => 
+            (b.filesize || 0) - (a.filesize || 0)
+          );
+        }
+        selectedFormat = audioFormats[0];
+        downloadUrl = selectedFormat.url;
+      }
     } else {
-      downloadUrl = data?.url || null;
+      // Find video formats (MP4)
+      const videoFormats = data.formats.filter((f: any) => 
+        f.ext === "mp4" && f.url && f.resolution
+      );
+      
+      if (videoFormats.length > 0) {
+        // Sort by resolution
+        videoFormats.sort((a: any, b: any) => {
+          const getResValue = (res: string) => {
+            const match = res.match(/(\d+)p/);
+            return match ? parseInt(match[1]) : 0;
+          };
+          return getResValue(b.resolution) - getResValue(a.resolution);
+        });
+        
+        // Get highest resolution
+        selectedFormat = videoFormats[0];
+        downloadUrl = selectedFormat.url;
+      }
     }
 
     if (!downloadUrl) {
@@ -106,7 +137,9 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         downloadUrl: downloadUrl,
-        format: format
+        format: format,
+        quality: format === "mp4" ? (selectedFormat?.resolution || "720p") : "high",
+        title: data.title || `YouTube-${videoId}`
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

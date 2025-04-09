@@ -10,6 +10,7 @@ interface RequestBody {
   url: string;
   format: string;
   quality?: string;
+  getDirectLink?: boolean;
 }
 
 // Set up CORS headers for cross-origin requests
@@ -131,7 +132,7 @@ async function getRapidAPIVideoDownloader(url: string, format: string): Promise<
     
     console.log(`Extracted video ID: ${videoId}`);
     
-    // Use the exact endpoint from your screenshot
+    // Use the correct endpoint format from the user's examples
     const apiUrl = `https://youtube-video-and-shorts-downloader.p.rapidapi.com/download.php?id=${videoId}`;
     
     console.log(`Calling RapidAPI endpoint: ${apiUrl}`);

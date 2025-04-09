@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
@@ -28,7 +29,7 @@ interface VideoInfo {
 }
 
 // Configuration - replace this with your actual server URL when deployed
-const API_SERVER_URL = process.env.API_SERVER_URL || "http://localhost:3001"; 
+const API_SERVER_URL = import.meta.env.VITE_API_SERVER_URL || "http://localhost:3001"; 
 const SERVER_HEALTH_TIMEOUT = 3000; // Shorter timeout for health check (3s)
 
 const Index = () => {

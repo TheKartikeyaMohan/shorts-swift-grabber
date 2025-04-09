@@ -73,27 +73,10 @@ const extractVideoId = (url: string): string | null => {
   return match ? match[1] : null;
 };
 
-// Mock successful response for testing when RapidAPI fails
-const getMockResponse = (videoId: string, format: string, quality: string): any => {
-  const isAudio = format === 'mp3';
-  const domain = 'https://streaming.mywebsite.com'; // Replace with actual domain if needed
-  
-  return {
-    title: `YouTube Video ${videoId}`,
-    thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    duration: "0:30",
-    author: "YouTube Creator",
-    downloadUrl: `${domain}/mock-downloads/${videoId}.${format}`,
-    quality: isAudio ? 'high' : quality,
-    format,
-    isAudio,
-  };
-};
-
 // Main function to handle requests
 serve(async (req) => {
   // Set up CORS headers for cross-origin requests
-  const headers = new Headers({
+  const corsHeaders = new Headers({
     "Content-Type": "application/json",
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -102,14 +85,14 @@ serve(async (req) => {
 
   // Handle preflight requests
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   // Ensure this is a POST request
   if (req.method !== "POST") {
     return new Response(
       JSON.stringify({ error: "Method not allowed" }),
-      { status: 405, headers }
+      { status: 405, headers: corsHeaders }
     );
   }
 
@@ -123,14 +106,14 @@ serve(async (req) => {
     if (!url) {
       return new Response(
         JSON.stringify({ error: "URL is required" }),
-        { status: 400, headers }
+        { status: 400, headers: corsHeaders }
       );
     }
     
     if (!format || !["mp4", "mp3"].includes(format)) {
       return new Response(
         JSON.stringify({ error: "Valid format (mp4 or mp3) is required" }),
-        { status: 400, headers }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -138,7 +121,7 @@ serve(async (req) => {
     if (!isValidYouTubeUrl(url)) {
       return new Response(
         JSON.stringify({ error: "Invalid YouTube URL" }),
-        { status: 400, headers }
+        { status: 400, headers: corsHeaders }
       );
     }
     
@@ -167,28 +150,9 @@ serve(async (req) => {
         ip_address: clientIP,
       });
       
-      // For demo purposes, return a mock response instead of failing
-      if (videoId) {
-        const mockResponse = getMockResponse(videoId, format, quality);
-        
-        await logToSupabase({
-          video_url: standardUrl,
-          download_url: mockResponse.downloadUrl,
-          status: "mock_success",
-          format,
-          quality,
-          ip_address: clientIP,
-        });
-        
-        return new Response(
-          JSON.stringify(mockResponse),
-          { status: 200, headers }
-        );
-      }
-      
       return new Response(
-        JSON.stringify({ error: "API configuration error" }),
-        { status: 500, headers }
+        JSON.stringify({ error: "API configuration error: RAPIDAPI_KEY not set" }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
@@ -219,28 +183,9 @@ serve(async (req) => {
           ip_address: clientIP,
         });
         
-        // Fallback to mock response for demo purposes
-        if (videoId) {
-          const mockResponse = getMockResponse(videoId, format, quality);
-          
-          await logToSupabase({
-            video_url: standardUrl,
-            download_url: mockResponse.downloadUrl,
-            status: "mock_success_after_api_error",
-            format,
-            quality,
-            ip_address: clientIP,
-          });
-          
-          return new Response(
-            JSON.stringify(mockResponse),
-            { status: 200, headers }
-          );
-        }
-        
         return new Response(
           JSON.stringify({ error: `API error: ${apiResponse.status} - ${errorText}` }),
-          { status: 500, headers }
+          { status: 500, headers: corsHeaders }
         );
       }
 
@@ -260,7 +205,7 @@ serve(async (req) => {
         
         return new Response(
           JSON.stringify({ error: "Invalid API response" }),
-          { status: 500, headers }
+          { status: 500, headers: corsHeaders }
         );
       }
 
@@ -342,38 +287,19 @@ serve(async (req) => {
           ip_address: clientIP,
         });
         
-        // For demo purposes, return a mock response instead of failing
-        if (videoId) {
-          const mockResponse = getMockResponse(videoId, format, quality);
-          
-          await logToSupabase({
-            video_url: standardUrl,
-            download_url: mockResponse.downloadUrl,
-            status: "mock_success_no_url",
-            format,
-            quality,
-            ip_address: clientIP,
-          });
-          
-          return new Response(
-            JSON.stringify(mockResponse),
-            { status: 200, headers }
-          );
-        }
-        
         return new Response(
           JSON.stringify({ error: `No ${format} URL found in available formats` }),
-          { status: 404, headers }
+          { status: 404, headers: corsHeaders }
         );
       }
 
-      // Prepare success response
+      // Prepare success response with REAL download URL from RapidAPI
       const result = {
         title: data.title || "YouTube Video",
         thumbnail: data.thumbnail || "",
         duration: data.duration || "",
         author: data.author || "",
-        downloadUrl,
+        downloadUrl, // This is the real download URL from RapidAPI
         quality: selectedQuality,
         format,
         isAudio,
@@ -389,8 +315,8 @@ serve(async (req) => {
         ip_address: clientIP,
       });
 
-      // Return successful response
-      return new Response(JSON.stringify(result), { status: 200, headers });
+      // Return successful response with the real download URL
+      return new Response(JSON.stringify(result), { status: 200, headers: corsHeaders });
     } catch (apiError) {
       console.error("API request error:", apiError);
       
@@ -403,28 +329,9 @@ serve(async (req) => {
         ip_address: clientIP,
       });
       
-      // For demo purposes, return a mock response
-      if (videoId) {
-        const mockResponse = getMockResponse(videoId, format, quality);
-        
-        await logToSupabase({
-          video_url: standardUrl,
-          download_url: mockResponse.downloadUrl,
-          status: "mock_success_api_exception",
-          format,
-          quality,
-          ip_address: clientIP,
-        });
-        
-        return new Response(
-          JSON.stringify(mockResponse),
-          { status: 200, headers }
-        );
-      }
-      
       return new Response(
         JSON.stringify({ error: "API request failed", details: apiError.message }),
-        { status: 500, headers }
+        { status: 500, headers: corsHeaders }
       );
     }
   } catch (error) {
@@ -443,7 +350,7 @@ serve(async (req) => {
     
     return new Response(
       JSON.stringify({ error: "Internal server error", details: error.message }),
-      { status: 500, headers }
+      { status: 500, headers: corsHeaders }
     );
   }
 });

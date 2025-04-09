@@ -93,7 +93,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
         throw new Error("No download URL provided");
       }
       
-      // Start the download
+      // Start the download with the real URL from RapidAPI
       startDownload(data.downloadUrl, title, data.format || selectedFormat);
       toast.success("Download started!");
       
@@ -113,6 +113,9 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
   };
 
   const startDownload = (url: string, title: string, format: string) => {
+    // Log the actual URL being used for download
+    console.log("Starting download with URL:", url);
+    
     // Create a hidden link and click it to start the download
     const link = document.createElement("a");
     link.href = url;
@@ -125,9 +128,7 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
     
     // Open URL in new tab as fallback if download attribute isn't supported
     // or for certain URL types that browsers handle differently
-    if (url.includes('youtube.com') || url.includes('rapidapi.com')) {
-      window.open(url, "_blank");
-    }
+    window.open(url, "_blank");
   };
 
   return (

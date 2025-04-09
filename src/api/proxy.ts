@@ -34,12 +34,7 @@ export async function getVideoInfo(url: string): Promise<VideoInfo> {
         '-o', outputFile
       ]);
       
-      let stdoutData = '';
       let stderrData = '';
-      
-      ytDlp.stdout.on('data', (data) => {
-        stdoutData += data.toString();
-      });
       
       ytDlp.stderr.on('data', (data) => {
         stderrData += data.toString();

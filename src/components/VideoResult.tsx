@@ -173,7 +173,8 @@ const VideoResult = ({ videoInfo, selectedFormat }: VideoResultProps) => {
       const response = await fetch(urlWithCache, {
         headers: {
           'User-Agent': 'Mozilla/5.0',
-          'Accept': 'video/*, audio/*, application/octet-stream'
+          'Accept': 'video/*, audio/*, application/octet-stream',
+          'Cache-Control': 'no-cache'
         }
       });
       

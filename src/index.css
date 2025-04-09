@@ -16,7 +16,7 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 10%;
 
-    --primary: 0 72% 51%;
+    --primary: 0 88% 45%;
     --primary-foreground: 0 0% 100%;
 
     --secondary: 0 0% 96%;
@@ -31,9 +31,9 @@
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 210 20% 93%;
-    --input: 210 20% 93%;
-    --ring: 0 72% 51%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 88% 45%;
 
     --radius: 0.5rem;
   }
@@ -75,7 +75,7 @@
   }
 
   body {
-    @apply bg-background text-foreground font-roboto;
+    @apply bg-gradient-to-b from-white to-gray-50 text-foreground font-roboto min-h-screen;
   }
 }
 
@@ -93,15 +93,19 @@
     @apply absolute left-4 text-muted-foreground;
   }
 
-  .google-gradient {
-    @apply bg-gradient-to-b from-white to-slate-50;
+  .yt-gradient {
+    @apply bg-gradient-to-b from-white to-gray-50;
   }
   
-  .google-card {
-    @apply border border-slate-200 rounded-lg shadow-sm hover:shadow transition-all duration-300;
+  .yt-card {
+    @apply border border-gray-200 rounded-lg shadow-sm hover:shadow transition-all duration-300 bg-white;
   }
   
-  .google-button {
-    @apply bg-blue-600 hover:bg-blue-700 text-white font-medium rounded transition-colors;
+  .yt-button {
+    @apply bg-red-600 hover:bg-red-700 text-white font-medium rounded transition-colors;
+  }
+
+  .yt-input {
+    @apply border border-gray-200 rounded-full focus:ring-2 focus:ring-red-500/30 focus:border-red-500 transition-all shadow-sm;
   }
 }

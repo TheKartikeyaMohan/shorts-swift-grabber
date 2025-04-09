@@ -44,31 +44,30 @@ const SearchBar = ({ onSearch, isLoading }: SearchBarProps) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto">
+    <div className="w-full max-w-xl mx-auto">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="relative google-card">
+        <div className="relative rounded-full border border-gray-300 shadow-sm overflow-hidden bg-white focus-within:shadow-md transition-shadow">
           <Input
             ref={inputRef}
             type="text"
             placeholder="Paste YouTube URL here"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            className="h-12 pl-4 pr-20 rounded-lg border-transparent focus:border-blue-500 focus:ring-0 shadow-none"
+            className="h-14 pl-6 pr-28 rounded-full border-0 shadow-none text-base focus-visible:ring-0 placeholder:text-gray-400"
             disabled={isLoading}
           />
           <Button
             type="button"
             onClick={handlePaste}
-            className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center space-x-1 text-xs bg-transparent hover:bg-transparent text-muted-foreground hover:text-blue-500"
+            className="absolute right-2 top-1/2 -translate-y-1/2 h-10 px-5 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 border border-gray-200"
             disabled={isLoading}
           >
-            <Clipboard className="h-4 w-4" /> 
-            <span>Paste</span>
+            paste
           </Button>
         </div>
         <Button 
           type="submit" 
-          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg text-sm tracking-wide transition-colors"
+          className="w-full h-12 bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-base tracking-wide transition-colors"
           disabled={isLoading}
         >
           {isLoading ? "Processing..." : "Download"}

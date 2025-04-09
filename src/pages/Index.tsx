@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Header from "@/components/Header";
 import SearchBar from "@/components/SearchBar";
 import VideoResult from "@/components/VideoResult";
@@ -10,22 +10,8 @@ import { Toaster } from "sonner";
 import { toast } from "sonner";
 
 const Index = () => {
-  const [isDarkMode, setIsDarkMode] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [videoInfo, setVideoInfo] = useState<any>(null);
-
-  // Check for user's preferred color scheme on initial load
-  useEffect(() => {
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    setIsDarkMode(!isDarkMode);
-    document.documentElement.classList.toggle('dark');
-  };
 
   const handleSearch = async (url: string) => {
     setIsLoading(true);
@@ -57,15 +43,15 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col google-gradient">
+    <div className="min-h-screen flex flex-col yt-gradient">
       <Toaster position="top-center" />
-      <Header toggleTheme={toggleTheme} isDarkMode={isDarkMode} />
+      <Header />
       
-      <main className="flex-1 max-w-xl mx-auto w-full px-4 pb-10">
-        <div className="py-8 text-center">
-          <h1 className="text-2xl font-medium mb-1 text-slate-800">YouTube Shorts Downloader</h1>
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 pb-10">
+        <div className="py-10 text-center">
+          <h1 className="text-2xl font-bold mb-2 text-slate-800">YouTube Shorts Downloader</h1>
           <p className="text-sm text-slate-500">
-            Download any YouTube video in high quality
+            Download any YouTube Shorts video in high quality
           </p>
         </div>
         
@@ -86,7 +72,7 @@ const Index = () => {
               </div>
             </>
           ) : (
-            <div className="text-center py-10 google-card bg-white/60 backdrop-blur-sm mx-auto max-w-md p-8">
+            <div className="text-center py-12 yt-card bg-white/60 backdrop-blur-sm mx-auto max-w-xl p-8 rounded-xl">
               <p className="text-sm text-slate-500">
                 Paste a YouTube URL above and click Download
               </p>

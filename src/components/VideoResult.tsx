@@ -41,7 +41,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
   };
 
   return (
-    <div className="w-full max-w-md mx-auto google-card overflow-hidden bg-white">
+    <div className="w-full max-w-xl mx-auto yt-card overflow-hidden bg-white">
       <div className="aspect-video relative overflow-hidden bg-black">
         <img 
           src={thumbnail} 
@@ -55,9 +55,9 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
         )}
       </div>
       
-      <div className="p-4 space-y-4">
+      <div className="p-5 space-y-4">
         <h3 className="font-medium text-lg line-clamp-2">{title}</h3>
-        {author && <p className="text-xs text-muted-foreground">{author}</p>}
+        {author && <p className="text-xs text-gray-500">{author}</p>}
         
         <div className="space-y-4 pt-2">
           <div className="flex gap-2">
@@ -65,10 +65,10 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
               <Button
                 key={option.quality}
                 variant="outline"
-                className={`flex-1 h-10 border rounded-full ${
+                className={`flex-1 h-10 rounded-full ${
                   selectedFormat === option.quality 
-                    ? "border-blue-500 bg-blue-50 text-blue-700" 
-                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    ? "border-red-500 bg-red-50 text-red-700" 
+                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
                 }`}
                 onClick={() => setSelectedFormat(option.quality)}
               >
@@ -87,7 +87,7 @@ const VideoResult = ({ videoInfo }: VideoResultProps) => {
                 handleDownload(option.quality, option.format);
               }
             }}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white h-11 font-medium text-sm rounded-lg tracking-wide transition-colors"
+            className="w-full bg-red-600 hover:bg-red-700 text-white h-11 font-medium text-sm rounded-full tracking-wide transition-colors"
             disabled={!!downloading}
           >
             {downloading ? "Preparing..." : "Download"}
